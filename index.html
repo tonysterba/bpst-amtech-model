@@ -1,0 +1,1296 @@
+<!doctype html>
+<html lang="cs">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Business Park Staré Město · Amtech campus</title>
+<style>
+  :root{
+    --bg:#10151c; --panel:rgba(16,21,28,.88); --ink:#e8edf2; --muted:#9aa7b4; --line:rgba(255,255,255,.14);
+    --acc:#1491F9; --warn:#f5a623;
+  }
+  @media (prefers-color-scheme: light){
+    :root{ --bg:#dfe6ee; --panel:rgba(255,255,255,.92); --ink:#14202b; --muted:#566574; --line:rgba(0,0,0,.14); }
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font:14px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;overflow:hidden}
+  #c{position:fixed;inset:0;width:100%;height:100%;display:block;touch-action:none}
+  .panel{position:fixed;background:var(--panel);backdrop-filter:blur(8px);border:1px solid var(--line);border-radius:12px;padding:12px 14px}
+  #side{top:12px;left:12px;width:310px;max-height:calc(100% - 24px);overflow:auto}
+  #side h1{font-size:15px;margin:0 0 2px}
+  #side .sub{color:var(--muted);font-size:12px;margin-bottom:10px}
+  #side h2{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin:14px 0 6px}
+  label.row{display:flex;gap:8px;align-items:center;padding:3px 0;cursor:pointer}
+  input[type=range]{width:100%}
+  button{font:inherit;color:var(--ink);background:transparent;border:1px solid var(--line);border-radius:8px;padding:6px 9px;cursor:pointer;text-align:left}
+  button:hover{border-color:var(--acc)}
+  button.on{background:var(--acc);border-color:var(--acc);color:#fff}
+  .presets{display:grid;gap:5px}
+  .legend div{display:flex;gap:8px;align-items:center;font-size:12.5px;padding:2px 0}
+  .lhd{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin:9px 0 3px}
+  .lrow{display:flex;gap:8px;align-items:flex-start;padding:2px 0;cursor:pointer;font-size:12.5px}
+  .lrow small{display:block;color:var(--muted);font-size:11.3px;line-height:1.3}
+  .lrow input{margin-top:3px}
+  .lsub{margin-left:44px;font-size:11.5px;color:var(--muted);display:flex;gap:6px;align-items:center;padding:1px 0}
+  .lsub2{margin-left:44px;font-size:11.5px;color:var(--muted)}
+  .sw{width:14px;height:14px;border-radius:3px;border:1px solid rgba(255,255,255,.5);flex:none}
+  .stat{font-size:12.5px;color:var(--muted)} .stat b{color:var(--ink)}
+  #stats,#program{display:none !important}   /* souhrnné údaje a program campusu v panelu nezobrazovat (požadavek uživatele) */
+  #program table{width:100%;border-collapse:collapse;font-size:12px}
+  #program td{padding:2px 0;vertical-align:top} #program td:last-child{text-align:right;white-space:nowrap;color:var(--muted)}
+  #program .tot td{border-top:1px solid var(--line);padding-top:4px;color:var(--ink);font-weight:600}
+  #hud{right:12px;top:12px;font-size:12.5px;min-width:200px}
+  #hud b{color:var(--ink)}
+  #help{right:12px;bottom:12px;font-size:12px;color:var(--muted);max-width:290px}
+  #toggle{display:none}
+  #err{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);padding:16px;background:#7a1f1f;color:#fff;border-radius:10px;display:none;max-width:80%}
+  #north{position:fixed;right:20px;bottom:130px;width:46px;height:46px;pointer-events:none}
+  @media (max-width:720px){
+    #side{width:calc(100% - 24px);max-height:55%;top:auto;bottom:12px}
+    #side.collapsed{max-height:42px;overflow:hidden}
+    #toggle{display:block;position:fixed;top:12px;left:12px;z-index:5}
+    #hud{top:60px;right:12px;min-width:0} #help{display:none} #north{bottom:auto;top:12px;right:12px}
+  }
+  #loading{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:var(--bg);z-index:9;color:var(--muted)}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="loading">Načítám terén a ortofoto…</div>
+<div id="err"></div>
+
+<button id="toggle" class="panel" onclick="document.getElementById('side').classList.toggle('collapsed')">☰ Menu</button>
+<div id="side" class="panel">
+  <h1>Platforma Amtech campus</h1>
+  <div class="sub">BPST Staré Město · terén DMR 5G, ortofoto ČÚZK, parcely RÚIAN</div>
+
+  <div style="display:flex;gap:6px;margin-bottom:8px">
+    <button id="mNow" style="flex:1;white-space:nowrap">Stav dnes</button>
+    <button id="mDes" class="on" style="flex:1;white-space:nowrap" title="Návrh B: zastavěná plocha ≈ 12 000 m²">Návrh B</button>
+    <button id="bScenA" style="flex:1;white-space:nowrap" title="Plánovaná Budova A nahradí st. 1419/18 (návrh, výstavba 2027)">Budova A</button>
+  </div>
+  <div class="stat" id="stats"></div>
+  <div id="program" style="display:none;margin-top:10px"></div>
+
+  <h2>Pohledy</h2>
+  <div class="presets" id="presets"></div>
+  <div style="display:flex;gap:6px;margin-top:6px;flex-wrap:nowrap">
+    <button id="bOrbit" class="on">Orbit</button>
+    <button id="bPov">POV</button>
+    <button id="bFly">✈ Cirrus</button>
+  </div>
+
+  <h2>Legenda a vrstvy</h2>
+  <div class="legend" id="legend"></div>
+
+  <details class="podklady"><summary><h2 style="display:inline">Podklady a zobrazení</h2></summary>
+  <label class="row"><input type="checkbox" id="lKopu"> Pozemkové úpravy (KoPÚ návrh)</label>
+  <label class="row" style="margin-left:22px"><input type="checkbox" id="lKopuLbl"> popisky pozemkových úprav</label>
+  <label class="row"><input type="checkbox" id="lOrto" checked> Ortofoto</label>
+  <label class="row"><input type="checkbox" id="lBp" checked> Hranice parcel uvnitř areálu</label>
+  <label class="row"><input type="checkbox" id="lCad"> Hranice parcel okolí</label>
+  <label class="row"><input type="checkbox" id="lCont" checked> Vrstevnice 1 m (silně 5 m)</label>
+  <label class="row"><input type="checkbox" id="lD55new" checked> D55 dostavěná</label>
+  <label class="row"><input type="checkbox" id="lPasD55" checked> Ochranné pásmo D55 (≈ 100 m od osy, orientačně)</label>
+  <label class="row"><input type="checkbox" id="lPasVVN" checked> Ochranné pásmo VVN 110 kV (≈ ±20 m od osy, orientačně)</label>
+  <label class="row"><input type="checkbox" id="lSlope"> Sklon terénu</label>
+  <label class="row"><input type="checkbox" id="lVeg" checked> Zeleň</label>
+  <label class="row"><input type="checkbox" id="lLabels" checked> Popisky</label>
+  <label class="row"><input type="checkbox" id="lShadow" checked> Stíny</label>
+
+  <h2>Převýšení terénu <span id="exV">1×</span></h2>
+  <input type="range" id="exag" min="1" max="4" step="0.5" value="1">
+  <h2>Čas dne <span id="hV">14:00</span></h2>
+  <input type="range" id="hour" min="6" max="19" step="0.25" value="14">
+  <div class="legend" id="slopeLegend" style="display:none;margin-top:6px"></div>
+  </details>
+</div>
+
+<div id="hud" class="panel">
+  <div>Výška: <b id="hZ">–</b></div>
+  <div>Sklon: <b id="hS">–</b></div>
+  <div>S-JTSK: <b id="hXY">–</b></div>
+</div>
+<div id="help" class="panel">Orbit: myš – otáčení, pravé tl. – posun, kolečko – zoom.<br>POV: klik do scény (nebo tažení), <b>W A S D</b> pohyb, <b>Shift</b> rychle, <b>F</b> let, <b>Space/C</b> výš/níž, <b>Esc</b> uvolnit myš.</div>
+<canvas id="cockpit" style="display:none;position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:3"></canvas>
+<svg id="north" viewBox="0 0 46 46"><circle cx="23" cy="23" r="21" fill="rgba(16,21,28,.7)" stroke="rgba(255,255,255,.4)"/><g id="needle"><path d="M23 6 L29 26 L23 22 L17 26Z" fill="#e5484d"/><path d="M23 40 L29 26 L23 22 L17 26Z" fill="#cfd6dd"/></g></svg>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+} }
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js';
+
+const $ = id => document.getElementById(id);
+const fail = m => { const e=$('err'); e.style.display='block'; e.textContent=m; $('loading').style.display='none'; };
+
+// ---------- geo ----------
+const BB = [-541800,-1180400,-540550,-1179600];     // xmin,ymin,xmax,ymax (S-JTSK, GIS osy x doprava, y nahoru)
+const NX = 625, NY = 400, PIX = 2, CX = -541175, CY = -1180000, Z0 = 200;
+const WM = NX*PIX, HM = NY*PIX, OX = -(NX-1)*PIX/2, OZ = -(NY-1)*PIX/2;   // rozsah modelu 1250 × 800 m
+const toLocal = (x,y) => [x-CX, -(y-CY)];
+const toGis   = (X,Z) => [X+CX, -Z+CY];
+const GRID = 4.65;   // stupně: severní směr sítě S-JTSK je vůči skutečnému severu natočen o ~4,65° (ověřeno podle haly st. 2491)
+// projektový souřadnicový systém campusu: e = skutečný východ, n = skutečný sever, počátek OG
+const OG=[-541000,-1179850], UE=[Math.sin((90+GRID)*Math.PI/180),Math.cos((90+GRID)*Math.PI/180)], UN=[Math.sin(GRID*Math.PI/180),Math.cos(GRID*Math.PI/180)];
+const enToGis=(e,n)=>[OG[0]+e*UE[0]+n*UN[0], OG[1]+e*UE[1]+n*UN[1]];
+const gisToEn=(x,y)=>{const dx=x-OG[0],dy=y-OG[1]; return [dx*UE[0]+dy*UE[1], dx*UN[0]+dy*UN[1]];};
+const enToLocal=(e,n)=>{const [x,y]=enToGis(e,n); return toLocal(x,y);};
+
+const PXM = 2.56, TW = Math.round(WM*PXM), TH = Math.round(HM*PXM);   // textura 3200 × 2048 px
+const gisToPx = (x,y) => [ (x-BB[0])*PXM, (BB[3]-y)*PXM ];
+
+let dem, nd, overlay, ortoImg; const LOGO={};
+async function load(){
+  const [a,b,c] = await Promise.all([
+    fetch('dem.bin?v=3').then(r=>r.arrayBuffer()),
+    fetch('ndsm.bin?v=3').then(r=>r.arrayBuffer()),
+    fetch('overlay.json?v=9zr').then(r=>r.json())
+  ]);
+  dem = new Uint16Array(a); nd = new Uint8Array(b); overlay = c;
+  const li=src=>new Promise((res,rej)=>{ const im=new Image(); im.onload=()=>res(im); im.onerror=()=>rej(new Error(src)); im.src=src; });
+  LOGO.uhcar=await li('logos/uhcar.svg?v=3'); LOGO.cervinka=await li('logos/cervinka.png?v=3'); LOGO.nobility=await li('logos/nobility.png?v=3');
+  ortoImg = await new Promise((res,rej)=>{ const im=new Image(); im.onload=()=>res(im); im.onerror=()=>rej(new Error('orto.jpg')); im.src='orto.jpg?v=3'; });
+}
+try { await load(); } catch(e){ fail('Nepodařilo se načíst data: '+e.message+' (spusť přes http server, ne z file://)'); throw e; }
+
+// výškové pole: HB = stávající terén, HD = terén po terénních úpravách (návrh), HH = aktuálně zobrazené
+const HB=new Float32Array(NX*NY); for(let k=0;k<NX*NY;k++) HB[k]=dem[k]/100+150;
+const HD=new Float32Array(HB);
+let HH=HB;
+const H = (i,j) => HH[j*NX+i];
+const Hs = (i,j) => H(Math.max(0,Math.min(NX-1,i)),Math.max(0,Math.min(NY-1,j)));
+function ground(X,Z){      // bilineárně, m n.m. v místních souřadnicích
+  const fi = (X-OX)/PIX, fj = (Z-OZ)/PIX;
+  const i=Math.floor(fi), j=Math.floor(fj), tx=fi-i, tz=fj-j;
+  const a=Hs(i,j)*(1-tx)+Hs(i+1,j)*tx, b=Hs(i,j+1)*(1-tx)+Hs(i+1,j+1)*tx;
+  return a*(1-tz)+b*tz;
+}
+function slopeAt(X,Z){   // % a směr svahu (azimut od severu)
+  const e=2, gx=(ground(X+e,Z)-ground(X-e,Z))/(2*e), gz=(ground(X,Z+e)-ground(X,Z-e))/(2*e);
+  const s=Math.hypot(gx,gz)*100;
+  return {s, az:(Math.atan2(-gx,gz)*180/Math.PI+360-GRID+360)%360};
+}
+function pip(x,y,ring){let c=false;for(let i=0,j=ring.length-1;i<ring.length;j=i++){const [xi,yi]=ring[i],[xj,yj]=ring[j];if((yi>y)!==(yj>y)&&x<(xj-xi)*(y-yi)/(yj-yi)+xi)c=!c;}return c;}
+
+// ---------- návrh B: program a terénní úpravy ----------
+const BLD = [
+  {id:'A1',type:'A',name:'A1 · R&D, laboratoře, vedení',   e0:-36,e1:18, n0:34, n1:66, level:202.8, fl:2, col:'#4aa3ff'},
+  {id:'A4',type:'A',name:'A4 · Inženýrské kanceláře',       e0:-36,e1:10, n0:2,  n1:32, level:202.8, fl:2, col:'#4aa3ff'},
+  {id:'A3',type:'A',name:'A3 · Campus hub (jídelna, šatny, wellness)', e0:24,e1:74, n0:4, n1:32, level:200.0, fl:2, col:'#7bd88f'},
+  {id:'A2',type:'A',name:'A2 · Demo a školicí centrum, showroom', e0:88,e1:134,n0:6, n1:48, level:197.8, fl:2, col:'#f5a623'},
+  {id:'B',type:'B',name:'B · Technologická a servisní hala (výroba, servis, expedice)', e0:6,e1:66,n0:-118,n1:-26,level:199.9, fl:1, h:12, col:'#c08cf0'}   // spojená B1+B2; východní hrana ≥ 20 m od osy VVN 110 kV
+];
+const SURF = [   // zpevněné plochy a pomocné pády pro terénní úpravy
+  {id:'plaza', name:'Náměstí (A-plaza)', e0:24,e1:84, n0:34,n1:66, level:199.6, col:'rgba(226,214,188,.95)'},
+  {id:'PA',    name:'Zásobovací dvůr (expedice)', e0:66,e1:95, n0:-100,n1:-28, level:199.0, col:'rgba(70,75,82,.92)'},
+  {id:'F',     name:'Vjezdové náměstí',  e0:86,e1:110,n0:-120,n1:-100, level:197.4, col:'rgba(214,206,190,.96)'},
+  {id:'PE1',   name:'Parkoviště PE1 (podél D55, pod vedením VVN)', e0:112,e1:136,n0:-70,n1:-8, level:198.4, col:'rgba(92,98,106,.92)', park:true},
+  {id:'PE2',   name:'Parkoviště PE2 (podél D55)', e0:112,e1:120,n0:-94,n1:-74, level:198.2, col:'rgba(92,98,106,.92)', park:true},
+  {id:'P2',    name:'Parkoviště P2 (návštěvy)', e0:88,e1:144,n0:50,n1:62, level:197.4, col:'rgba(92,98,106,.92)', park:true},
+  {id:'P3',    name:'Parkoviště P3 (podél D55)', e0:137,e1:146,n0:8,n1:48, level:196.6, col:'rgba(92,98,106,.92)', park:true},
+  {id:'prom1', name:'Promenáda A4–A3',   e0:10,e1:24, n0:2,n1:32, level:201.0, col:'rgba(210,200,178,.9)'},
+  {id:'prom2', name:'Promenáda A3–A2',   e0:74,e1:88, n0:6, n1:32, level:198.9, col:'rgba(210,200,178,.9)'}
+];
+const PADS=[...BLD,...SURF];
+let SCENA_PLAN=false;   // varianta Budova A (nahrazuje st. 1419/18): terén se urovná pod budovou a manipulační plochou
+const PLAN_PAD={id:'BAPAD',e0:-319,e1:-98,n0:-8,n1:77,level:0};
+{ let sum=0,cnt=0; for(let e=-298;e<=-130.4;e+=6)for(let n=14;n<=74;n+=6){ const [X,Z]=enToLocal(e,n); sum+=ground(X,Z); cnt++; } PLAN_PAD.level=sum/cnt; }
+
+// ---------- vedení VVN 110 kV (ZABAGED, V545/V546) ----------
+const HV=overlay.power.hv, PYL=overlay.power.pylons.filter(p=>!(Math.abs(p[0]+541025.7)<1&&Math.abs(p[1]+1180086)<1)).sort((a,b)=>b[0]-a[0]);
+const HV_BAND=20;   // orientační vzdálenost od osy, kde je nutný souhlas provozovatele (pásmo 12–15 m od krajního vodiče + rozpětí); k ověření
+function distToHV(x,y){ let best=1e9; for(let i=0;i<HV.length-1;i++){ const [ax,ay]=HV[i],[bx,by]=HV[i+1],dx=bx-ax,dy=by-ay; const t=Math.max(0,Math.min(1,((x-ax)*dx+(y-ay)*dy)/(dx*dx+dy*dy))); best=Math.min(best,Math.hypot(x-ax-t*dx,y-ay-t*dy)); } return best; }
+function minDistRectHV(r){ let best=1e9; for(let i=0;i<=60;i++){ const t=i/60; for(const [e,n] of [[r.e0+(r.e1-r.e0)*t,r.n0],[r.e0+(r.e1-r.e0)*t,r.n1],[r.e0,r.n0+(r.n1-r.n0)*t],[r.e1,r.n0+(r.n1-r.n0)*t]]){ const [x,y]=enToGis(e,n); best=Math.min(best,distToHV(x,y)); } } return best; }
+
+function gradeTerrain(){
+  // každá buňka patří k nejbližšímu padu; svah úprav 1:3
+  const hall=overlay.parcels.find(p=>p.k==='st.2491');
+  for(let j=0;j<NY;j++)for(let i=0;i<NX;i++){
+    const [x,y]=toGis(OX+i*PIX,OZ+j*PIX); const [e,n]=gisToEn(x,y);
+    let best=null,bd=1e9;
+    for(const p of (SCENA_PLAN?[...PADS,PLAN_PAD]:PADS)){
+      const dx=Math.max(p.e0-e,0,e-p.e1), dn=Math.max(p.n0-n,0,n-p.n1), d=Math.hypot(dx,dn);
+      if(d<bd){bd=d;best=p;}
+    }
+    const o=HB[j*NX+i]; let v=o;
+    if(best&&bd<40){ v = bd===0 ? best.level : (o>best.level ? Math.min(o,best.level+bd/3) : Math.max(o,best.level-bd/3)); }
+    HD[j*NX+i]=v;
+  }
+}
+gradeTerrain();
+// bilance zemních prací a zásahy mimo perimetr
+const perimRings=[...overlay.parcels.filter(p=>['pozemek','hala','prijezd2'].includes(p.c)).flatMap(p=>p.r), overlay.sold16];
+let cutV=0, fillV=0, outsideA=0;
+for(let j=0;j<NY;j++)for(let i=0;i<NX;i++){
+  const dz=HD[j*NX+i]-HB[j*NX+i]; if(Math.abs(dz)<0.02)continue;
+  if(dz<0) cutV-=dz*PIX*PIX; else fillV+=dz*PIX*PIX;
+  const [x,y]=toGis(OX+i*PIX,OZ+j*PIX); if(!perimRings.some(r=>pip(x,y,r))) outsideA+=PIX*PIX;
+}
+
+// ---------- scene ----------
+const canvas=$('c');
+const renderer=new THREE.WebGLRenderer({canvas,antialias:true});
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+renderer.shadowMap.enabled=true; renderer.shadowMap.type=THREE.PCFSoftShadowMap;
+renderer.outputColorSpace=THREE.SRGBColorSpace;
+const scene=new THREE.Scene();
+scene.background=new THREE.Color(0xa9c4dc);
+scene.fog=new THREE.Fog(0xa9c4dc,900,2600);
+const camera=new THREE.PerspectiveCamera(55,1,1,6000);
+
+const hemi=new THREE.HemisphereLight(0xdfeaff,0x6b5f4c,.75); scene.add(hemi);
+const sun=new THREE.DirectionalLight(0xfff2dd,2.2); scene.add(sun); scene.add(sun.target);
+sun.castShadow=true; sun.shadow.mapSize.set(4096,4096);
+const sc=sun.shadow.camera; sc.left=-660; sc.right=660; sc.top=420; sc.bottom=-420; sc.near=10; sc.far=1800; sun.shadow.bias=-0.0006; sun.shadow.normalBias=0.6;
+
+const world=new THREE.Group(); scene.add(world);
+
+// terén
+const geo=new THREE.PlaneGeometry((NX-1)*PIX,(NY-1)*PIX,NX-1,NY-1); geo.rotateX(-Math.PI/2);
+function applyHeights(){
+  const pos=geo.attributes.position, uv=geo.attributes.uv;
+  for(let j=0;j<NY;j++)for(let i=0;i<NX;i++){
+    const k=j*NX+i; pos.setY(k,H(i,j)-Z0);
+    uv.setXY(k,(pos.getX(k)+WM/2)/WM, 1-(pos.getZ(k)+HM/2)/HM);
+  }
+  pos.needsUpdate=true; geo.computeVertexNormals();
+}
+applyHeights();
+const tex=new THREE.CanvasTexture(document.createElement('canvas'));
+tex.colorSpace=THREE.SRGBColorSpace; tex.anisotropy=renderer.capabilities.getMaxAnisotropy();
+const terrain=new THREE.Mesh(geo,new THREE.MeshStandardMaterial({map:tex,roughness:1,metalness:0}));
+terrain.receiveShadow=true; world.add(terrain);
+
+// ---------- kategorie ----------
+const CAT = {
+  pozemek:{name:'Pozemek campusu (7461/6, 7, 13, 14)',fill:'rgba(245,166,35,.22)',line:'#ffb020'},
+  hala:{name:'Hala st. 2491 (k demolici)',fill:'rgba(80,140,255,.35)',line:'#6fa0ff'},
+  paterni:{name:'↳ prodávaná část páteřní komunikace 7461/16',fill:'rgba(245,166,35,.40)',line:'#ffb020'},
+  prijezd2:{name:'Příjezd 2 (7268/1–8)',fill:'rgba(230,80,220,.45)',line:'#f050e6'},
+  bp:{name:'Hranice parcel uvnitř areálu (7461/*)',fill:'rgba(60,190,175,.20)',line:'#3cc8b8'},
+  bp2:{name:'6010/2 – RK Průmyslová FB s.r.o.',fill:'rgba(120,200,255,.20)',line:'#5cc8ff'}
+};
+const PERIM = ['pozemek','hala','paterni','prijezd2'];
+const OWN3840=['st.2491','6009/5','6009/22','6009/90','6010/3','6010/4','6011/167','6018/529','6018/530','6021/46','7268/1','7440','7461/1','7461/2','7461/15','7461/16','7461/17','7461/22','7461/27','7461/29','7461/30'];   // výpis z KN, LV 3840, stav k 19. 10. 2026: vlastník RK PRŮMYSLOVÁ s.r.o.
+const PRIJ1=['6010/3'];   // Příjezd 1
+const PATER=['7461/15'];   // páteřní komunikace (vedle 7461/16)   // Příjezd 1 (údaj uživatele z označení v modelu; navazuje na vnitroareálovou páteřní komunikaci 7461/15) – k potvrzení
+const OWNFM=[];
+
+
+const JIHN='RK Průmyslová SPV - budova Jih s.r.o.';
+const isJih=q=>q.k==='6010/12'||q.k==='7461/11'||q.k==='7461/25'||q.k==='7461/26'||(q.k==='st.1419'&&q.a===8010);   // LV 6510 (KN k 1. 6. 2025, vyrozumění o výmazu zástavy J&T 12. 9. 2025): st. 1419/2, 6010/12, 7461/11 – IČO 22410139; 7461/25 a 7461/26 vznikly rozdělením 7461/11 (840+823+1163=2826 m²), přiřazeno na pokyn uživatele; výměry v modelu dle aktuálního RÚIAN
+const OWNFB=['6010/2'];   // RK Průmyslová FB s.r.o. (údaj uživatele; výpis LV zatím nemám)
+const RESV=['7461/1','7461/2','7461/29','6010/2','6010/4','7440'];   // rezervované parcely (údaj uživatele)
+const CERV=['7461/8','7461/18','7461/19','7461/9','7461/24'];   // prodáno Červinka: I 7461/8, II 7461/18, III 7461/19, IV 7461/9 + 7461/24 (kupní smlouvy a vklady do KN)
+const SALEOWN={'st.2491':'RK Průmyslová s.r.o.','7461/5':'RK Průmyslová SPV IV s.r.o.','7461/6':'RK Průmyslová SPV III s.r.o.','7461/7':'RK Průmyslová SPV II s.r.o.','7461/10':'RK Průmyslová SPV XII s.r.o.','7461/21':'RK Průmyslová SPV XII s.r.o.','7461/13':'RK Průmyslová SPV X s.r.o.','7461/14':'RK Průmyslová SPV I s.r.o.'};   // dosud neprodané parcely k prodeji (bez rezervovaných, Budovy A na 7461/3 a 7461/4, Budovy C a Jih); vlastník dle vyrozumění KÚ o vkladu zástavy 2OPF (V-4781…V-4790/2026-711, vklad 22.–23. 9. 2026): LV 3840 RK Průmyslová; LV 6499 (7461/14) SPV I, 6500 (7461/7) II, 6501 (7461/6) III, 6502 (7461/5) IV, 6503 (7461/4) V, 6504 (st. 1419/18) VI, 6505 (7461/3) VII, 6506 (7461/13) X, 6508 (7461/10, 7461/21) XII; názvy SPV podle zástavních smluv, jméno vlastníka ve vyrozumění není
+const SALE=Object.keys(SALEOWN);
+const NOBI=['7461/17'];  // Nobility (Nobipark)
+const area = {}; for(const p of overlay.parcels) if(PERIM.includes(p.c)) area[p.c]=(area[p.c]||0)+p.a;
+area.paterni = overlay.sold16Area;   // jen prodávaná část 7461/16 (zákres z Mapy.cz, průnik s parcelou)
+const total = PERIM.reduce((s,c)=>s+(area[c]||0),0);
+const fmt = n=>Math.round(n).toLocaleString('cs-CZ').replace(/ /g,' ');
+const DIR_DAT=['severu','severovýchodu','východu','jihovýchodu','jihu','jihozápadu','západu','severozápadu'];
+const DIR_NOM=['sever','severovýchod','východ','jihovýchod','jih','jihozápad','západ','severozápad'];
+const compassName = az => DIR_NOM[Math.round(az/45)%8];
+
+// ---------- statistiky ----------
+const pozRings=overlay.parcels.filter(p=>p.c==='pozemek').flatMap(p=>p.r);
+let DESIGN=true;
+function updateStats(){
+  let zmin=1e9,zmax=-1e9,gxs=0,gys=0,cnt=0;
+  for(let X=OX;X<-OX;X+=2)for(let Z=OZ;Z<-OZ;Z+=2){
+    const [x,y]=toGis(X,Z); if(!pozRings.some(r=>pip(x,y,r)))continue;
+    const z=ground(X,Z); zmin=Math.min(zmin,z); zmax=Math.max(zmax,z);
+    const e=2; gxs+=(ground(X+e,Z)-ground(X-e,Z))/(2*e); gys+=(ground(X,Z+e)-ground(X,Z-e))/(2*e); cnt++;
+  }
+  const gx=gxs/cnt, gz=gys/cnt, meanS=Math.hypot(gx,gz)*100, meanAz=(Math.atan2(-gx,gz)*180/Math.PI+360-GRID+360)%360;
+  let s=`Perimetr celkem <b>${fmt(total)} m²</b><br>Terén pozemku <b>${zmin.toFixed(1)}–${zmax.toFixed(1)} m n.m.</b><br>Průměrný sklon <b>${meanS.toFixed(1)} %</b>, klesá k <b>${DIR_DAT[Math.round(meanAz/45)%8]}</b> (${Math.round(meanAz)}°)`;
+  if(DESIGN){ const near=BLD.map(b=>[b.id,minDistRectHV(b)]).sort((a,b)=>a[1]-b[1])[0];
+    s+=`<br>Vedení VVN 110 kV: nejbližší budova ${near[0]} <b>${near[1].toFixed(0)} m</b> od osy (orient. pásmo ±${HV_BAND} m)`; }
+  if(DESIGN){ const dd=(x,y)=>Math.min(...overlay.d55.map(pts=>{ let m=1e9; for(let i=0;i<pts.length-1;i++){ const [ax,ay]=pts[i],[bx,by]=pts[i+1],dx=bx-ax,dy=by-ay,t=Math.max(0,Math.min(1,((x-ax)*dx+(y-ay)*dy)/(dx*dx+dy*dy))); m=Math.min(m,Math.hypot(x-ax-t*dx,y-ay-t*dy)); } return m; }));
+    const mind=BLD.map(b=>{ let best=1e9; for(let i=0;i<=40;i++){ const t=i/40; for(const [e,n] of [[b.e0+(b.e1-b.e0)*t,b.n0],[b.e0+(b.e1-b.e0)*t,b.n1],[b.e0,b.n0+(b.n1-b.n0)*t],[b.e1,b.n0+(b.n1-b.n0)*t]]){ const [x,y]=enToGis(e,n); best=Math.min(best,dd(x,y)); } } return [b.id,best]; }).sort((a,b)=>a[1]-b[1]);
+    s+=`<br>Pásmo D55 (100 m od osy): ${mind.filter(m=>m[1]<100).map(m=>m[0]+' '+m[1].toFixed(0)+' m').join(', ')||'žádná budova'} ${mind.some(m=>m[1]<100)?'– uvnitř pásma, stavba v něm vyžaduje souhlas silničního správního úřadu (k ověření)':''}`; }
+  if(DESIGN) s+=`<br>Zemní práce: výkop <b>${fmt(cutV)} m³</b>, násyp <b>${fmt(fillV)} m³</b>, saldo <b>${fillV-cutV>=0?'+':'−'}${fmt(Math.abs(fillV-cutV))} m³</b> (orientačně, bez skrývky a konstrukčních vrstev)`+(outsideA>1?`<br><span style="color:var(--warn)">Úpravy zasahují ${fmt(outsideA)} m² mimo perimetr</span>`:'');
+  $('stats').innerHTML=s;
+  if(DESIGN){
+    const fp=BLD.reduce((s,b)=>s+(b.e1-b.e0)*(b.n1-b.n0),0), gfa=BLD.reduce((s,b)=>s+(b.e1-b.e0)*(b.n1-b.n0)*b.fl,0);
+    $('program').style.display='block';
+    $('program').innerHTML='<table>'+BLD.map(b=>`<tr><td><span class="sw" style="display:inline-block;background:${b.col};vertical-align:-2px;margin-right:6px"></span>${b.name}</td><td>${fmt((b.e1-b.e0)*(b.n1-b.n0))} m²<br>${b.fl} NP</td></tr>`).join('')+
+      `<tr class="tot"><td>Zastavěná plocha</td><td>${fmt(fp)} m²</td></tr><tr class="tot"><td>Hrubá podlažní plocha (orient.)</td><td>≈ ${fmt(Math.round(gfa/100)*100)} m²</td></tr><tr><td colspan="2" style="color:var(--muted);padding-top:4px">parkování na povrchu ≈ ${fmt(Math.round((SURF.filter(s=>s.park).reduce((a,s)=>a+(s.e1-s.e0)*(s.n1-s.n0),0))/25))} míst (podél D55 včetně pásma VVN, odhad 25 m²/místo); kapacita parkování je k doplnění.</td></tr></table>`;
+  } else $('program').style.display='none';
+}
+
+// ---------- vykreslení textury ----------
+const tc=tex.image; tc.width=TW; tc.height=TH; const g=tc.getContext('2d');
+const slopeCanvas=document.createElement('canvas'); slopeCanvas.width=NX; slopeCanvas.height=NY;
+function buildSlope(){
+  const sg=slopeCanvas.getContext('2d'), im=sg.createImageData(NX,NY);
+  for(let j=0;j<NY;j++)for(let i=0;i<NX;i++){
+    const gxx=(Hs(i+1,j)-Hs(i-1,j))/(2*PIX), gyy=(Hs(i,j+1)-Hs(i,j-1))/(2*PIX), s=Math.hypot(gxx,gyy)*100;
+    let c; if(s<2)c=[60,170,90]; else if(s<5)c=[200,210,60]; else if(s<8)c=[245,160,40]; else if(s<15)c=[225,70,50]; else c=[120,20,60];
+    im.data.set([...c,150],(j*NX+i)*4);
+  }
+  sg.putImageData(im,0,0);
+}
+let contourLines=[];
+function buildContours(){
+  contourLines=[];
+  const sm=new Float32Array(NX*NY);
+  for(let j=0;j<NY;j++)for(let i=0;i<NX;i++){let s=0,c=0;for(let dj=-1;dj<=1;dj++)for(let di=-1;di<=1;di++){s+=Hs(i+di,j+dj);c++;}sm[j*NX+i]=s/c;}
+  const px=(i,j)=>[(i+.5)*PIX*PXM,(j+.5)*PIX*PXM];
+  for(let Lv=185;Lv<=215;Lv++){
+    for(let j=0;j<NY-1;j++)for(let i=0;i<NX-1;i++){
+      const a=sm[j*NX+i],b=sm[j*NX+i+1],c=sm[(j+1)*NX+i+1],d=sm[(j+1)*NX+i];
+      const mn=Math.min(a,b,c,d), mx=Math.max(a,b,c,d); if(Lv<mn||Lv>=mx)continue;
+      const pts=[]; const edge=(v1,v2,p1,p2)=>{ if((v1<Lv)!==(v2<Lv)){const t=(Lv-v1)/(v2-v1); pts.push([p1[0]+(p2[0]-p1[0])*t,p1[1]+(p2[1]-p1[1])*t]);}};
+      const A=px(i,j),B=px(i+1,j),C=px(i+1,j+1),D=px(i,j+1);
+      edge(a,b,A,B); edge(b,c,B,C); edge(c,d,C,D); edge(d,a,D,A);
+      if(pts.length===2) contourLines.push([Lv,pts[0][0],pts[0][1],pts[1][0],pts[1][1]]);
+      else if(pts.length===4){ contourLines.push([Lv,pts[0][0],pts[0][1],pts[1][0],pts[1][1]]); contourLines.push([Lv,pts[2][0],pts[2][1],pts[3][0],pts[3][1]]); }
+    }
+  }
+}
+const L = {orto:true,perim:true,roads:true,cad:false,cont:true,slope:false,veg:true,labels:true,pasD55:true,pasVVN:true,d55new:true,kopu:false,own:false,resv:true,kopuLbl:false,bp:true,bExist:true,bAmtech:true,scenA:false,sold:true,sale:true,fm:false}
+function path(ctx,ring){ ctx.beginPath(); ring.forEach(([x,y],i)=>{const [a,b]=gisToPx(x,y); i?ctx.lineTo(a,b):ctx.moveTo(a,b);}); ctx.closePath(); }
+function enRectRing(r){ return [[r.e0,r.n0],[r.e1,r.n0],[r.e1,r.n1],[r.e0,r.n1]].map(([e,n])=>enToGis(e,n)); }
+function paint(){
+  g.clearRect(0,0,TW,TH);
+  if(L.orto) g.drawImage(ortoImg,0,0,TW,TH); else { g.fillStyle='#8f9a8a'; g.fillRect(0,0,TW,TH); }
+  if(L.d55new){   // dálnice D55 dostavěná: modelováno z os ZABAGED (D55 1, D55 2), ne z fotografií
+    const D=overlay.d55; const line=(pts,wm,st,dash)=>{ g.save(); g.lineJoin='round'; g.lineCap='butt'; g.setLineDash(dash||[]); g.beginPath(); pts.forEach(([x,y],i)=>{const [a,b]=gisToPx(x,y); i?g.lineTo(a,b):g.moveTo(a,b);}); g.lineWidth=wm*PXM; g.strokeStyle=st; g.stroke(); g.restore(); };
+    for(const pts of D) line(pts,44,'rgba(128,142,92,.96)');                 // těleso a svahy
+    for(const pts of D) line(pts,11.6,'rgba(236,238,240,.98)');              // krajnice
+    for(const pts of D) line(pts,10.8,'rgba(70,74,80,1)');                   // vozovka
+    for(const pts of D) line(pts,.35,'rgba(255,255,255,.95)',[9,13]);        // dělicí čára pruhů
+  }
+  if(DESIGN){
+    // zeleň návrhu pod zpevněnými plochami: rozryté plochy na 7461/13 přebarvit na trávník
+    if(L.bAmtech){ g.save(); g.fillStyle='rgba(120,150,84,.78)'; for(const r of overlay.parcels.filter(p=>['7461/6','7461/7','7461/13','st.2491'].includes(p.k)).flatMap(p=>p.r)){ path(g,r); g.fill(); } g.restore(); }
+    if(L.bAmtech) for(const s of SURF){ g.fillStyle=s.col; path(g,enRectRing(s)); g.fill(); if(s.park){ g.strokeStyle='rgba(255,255,255,.75)'; g.lineWidth=1.2; const [e0,e1,n0,n1]=[s.e0,s.e1,s.n0,s.n1]; for(let n=n0+3;n<n1-2;n+=5.2){ g.beginPath(); const a=gisToPx(...enToGis(e0+1,n)), b=gisToPx(...enToGis(e1-1,n)); g.moveTo(a[0],a[1]); g.lineTo(b[0],b[1]); g.stroke(); } } }
+    if(L.scenA){ const q3=overlay.kopu.find(q=>q.n==='3840/3'); if(q3){ g.save(); g.beginPath(); for(const r of q3.r){ r.forEach(([x,y],i)=>{const [a,b]=gisToPx(x,y); i?g.lineTo(a,b):g.moveTo(a,b);}); g.closePath(); } g.clip(); g.fillStyle='rgba(106,156,82,.96)'; g.fillRect(0,0,TW,TH); g.restore(); } }   // zeleň u Budovy A jen na parcele z pozemkových úprav (3840/3)
+    if(L.bAmtech) for(const b of BLD){ g.fillStyle='rgba(40,44,50,.98)'; path(g,enRectRing(b)); g.fill(); }
+  }
+  if(L.slope){ g.imageSmoothingEnabled=true; g.drawImage(slopeCanvas,0,0,TW,TH); }
+  if(L.cad){ g.strokeStyle='rgba(255,255,255,.35)'; g.lineWidth=1; for(const p of overlay.parcels) if(p.c==='okoli') for(const r of p.r){path(g,r);g.stroke();} }
+  if(L.cont){
+    for(const th of [0,1]){
+      g.strokeStyle= th? 'rgba(255,255,255,.95)':'rgba(255,255,255,.45)'; g.lineWidth= th?2.2:.8;
+      g.beginPath(); for(const [lv,a,b,c,d] of contourLines){ if((lv%5===0)===!!th){g.moveTo(a,b);g.lineTo(c,d);} } g.stroke();
+    }
+  }
+  if(L.pasVVN){   // ochranné pásmo vedení VVN 110 kV (orientačně ±20 m od osy)
+    g.save(); g.lineJoin='round'; g.lineCap='butt';
+    g.beginPath(); HV.forEach(([x,y],i)=>{const [a,b]=gisToPx(x,y); i?g.lineTo(a,b):g.moveTo(a,b);});
+    g.strokeStyle='rgba(235,60,60,.22)'; g.lineWidth=2*HV_BAND*PXM; g.stroke();
+    g.strokeStyle='rgba(255,90,90,.95)'; g.lineWidth=2.2; g.setLineDash([16,10]); g.stroke(); g.restore();
+  }
+  if(L.pasD55){   // ochranné pásmo D55: 100 m od osy přilehlého jízdního pásu (zákon č. 13/1997 Sb., § 30) – orientačně
+    const D=overlay.d55, tmp=document.createElement('canvas'); tmp.width=TW; tmp.height=TH; const t=tmp.getContext('2d'); t.lineCap='butt'; t.lineJoin='round'; t.strokeStyle='#9b59ff'; t.lineWidth=2*100*PXM;
+    for(const pts of D){ t.beginPath(); pts.forEach(([x,y],i)=>{const [a,b]=gisToPx(x,y); i?t.lineTo(a,b):t.moveTo(a,b);}); t.stroke(); }
+    g.save(); g.globalAlpha=.17; g.drawImage(tmp,0,0); g.restore();
+    const dist=(x,y,pts)=>{ let m=1e9; for(let i=0;i<pts.length-1;i++){ const [ax,ay]=pts[i],[bx,by]=pts[i+1],dx=bx-ax,dy=by-ay,tt=Math.max(0,Math.min(1,((x-ax)*dx+(y-ay)*dy)/(dx*dx+dy*dy))); m=Math.min(m,Math.hypot(x-ax-tt*dx,y-ay-tt*dy)); } return m; };
+    g.save(); g.setLineDash([18,10]); g.strokeStyle='rgba(190,150,255,.95)'; g.lineWidth=2.4;
+    D.forEach((pts,ai)=>{ const other=D[1-ai]; for(const sd of [-1,1]){ g.beginPath(); let pen=false;
+      for(let i=0;i<pts.length;i++){ const [x,y]=pts[i], [x1,y1]=pts[Math.max(0,i-1)], [x2,y2]=pts[Math.min(pts.length-1,i+1)], dx=x2-x1, dy=y2-y1, l=Math.hypot(dx,dy)||1; const ox=x+sd*(-dy/l)*100, oy=y+sd*(dx/l)*100;
+        if(dist(ox,oy,other)>=99){ const [a,b]=gisToPx(ox,oy); if(!pen){g.moveTo(a,b);pen=true;} else g.lineTo(a,b); } else pen=false; }
+      g.stroke(); } });
+    g.restore();
+  }
+  const zoneOn=c=>(['pozemek','hala'].includes(c)&&L.perim)||(c==='prijezd2'&&(L.roads||L.perim))||(c==='paterni'&&(L.perim||L.roads))||(c==='bp'&&L.bp);
+  if(L.perim||L.roads||L.bp){
+    const clip16=()=>{ g.beginPath(); for(const p of overlay.parcels) if(p.c==='paterni') for(const r of p.r){ r.forEach(([x,y],i)=>{const [a,b]=gisToPx(x,y); i?g.lineTo(a,b):g.moveTo(a,b);}); g.closePath(); } g.clip(); };
+    for(const p of overlay.parcels){ const k=CAT[p.c]; if(!k||!zoneOn(p.c))continue;
+      if(p.c==='paterni'){ if(L.perim&&L.bAmtech&&!L.sale){ g.save(); clip16(); g.fillStyle=k.fill; path(g,overlay.sold16); g.fill(); g.restore(); } continue; }
+      if(DESIGN&&p.c==='pozemek')continue;
+      if(!L.bAmtech&&(p.c==='pozemek'||p.c==='hala'))continue;   // podbarvení perimetru jen s vrstvou Klient: Amtech
+      if(L.sale&&SALE.includes(p.k))continue;   // perimetr campusu je pořád k prodeji – podbarví vrstva K prodeji
+      g.fillStyle=k.fill; for(const r of p.r){ path(g,r); g.fill(); }
+    }
+    for(const p of overlay.parcels){ const k=CAT[p.c]; if(!k||!zoneOn(p.c))continue;
+      if(p.c==='paterni'){
+        if(L.roads){ g.save(); g.fillStyle='rgba(230,230,230,.16)'; for(const r of p.r){ path(g,r); g.fill(); } g.setLineDash([10,8]); g.strokeStyle='rgba(235,235,235,.95)'; g.lineWidth=2.4; for(const r of p.r){ path(g,r); g.stroke(); } g.restore(); }
+        if(L.perim){ g.save(); clip16(); g.strokeStyle=k.line; g.lineWidth=7; path(g,overlay.sold16); g.stroke(); g.restore(); } continue;
+      }
+      g.strokeStyle=k.line; g.lineWidth=3.5; for(const r of p.r){ path(g,r); g.stroke(); }
+    }
+  }
+  if(L.kopu){   // komplexní pozemkové úpravy Staré Město u UH – návrh nového uspořádání (Geocentrum, 30. 5. 2024): všechny navržené parcely, nové parcely RK Průmyslová (LV 3840) zeleně
+    g.save(); g.setLineDash([7,5]); g.strokeStyle='rgba(255,214,102,.85)'; g.lineWidth=1.6;
+    for(const q of overlay.kopu) if(q.lv!=='3840') for(const r of q.r){ path(g,r); g.stroke(); }
+    g.restore();
+    g.save(); g.fillStyle='rgba(255,140,60,.28)'; g.strokeStyle='#ff8c3c'; g.lineWidth=3; g.setLineDash([12,7]); for(const q of overlay.kopuOld) for(const r of q.r){ path(g,r); g.fill(); g.stroke(); } g.restore();   // původní parcely (nároky RK Průmyslová)
+    for(const q of overlay.kopu) if(q.lv==='3840'){ g.fillStyle='rgba(46,158,91,.50)'; g.strokeStyle='#27c274'; g.lineWidth=4; for(const r of q.r){ path(g,r); g.fill(); g.stroke(); } }
+  }
+  if(L.own){
+    g.save(); g.strokeStyle='#2f80ff'; g.lineWidth=4; g.fillStyle='rgba(47,128,255,.20)'; for(const q of overlay.parcels) if(OWN3840.includes(q.k)||OWNFB.includes(q.k)||isJih(q)) for(const r of q.r){ path(g,r); g.fill(); g.stroke(); } g.restore();
+  }
+  if(L.fm){
+    g.save(); g.strokeStyle='#2fd6a0'; g.lineWidth=5; g.fillStyle='rgba(47,214,160,.30)'; for(const q of overlay.parcels) if(OWNFM.includes(q.k)) for(const r of q.r){ path(g,r); g.fill(); g.stroke(); } g.restore();
+  }
+  if(L.roads){   // páteřní komunikace 7461/15: šedá čárkovaně jako 7461/16
+    g.save(); g.fillStyle='rgba(230,230,230,.16)'; g.strokeStyle='rgba(235,235,235,.95)'; g.lineWidth=2.4; g.setLineDash([10,8]); for(const q of overlay.parcels) if(PATER.includes(q.k)) for(const r of q.r){ path(g,r); g.fill(); g.stroke(); } g.restore();
+  }
+  if(L.roads){   // Příjezd 1: růžové zvýraznění nad vlastnickou modrou
+    g.save(); g.fillStyle='rgba(255,166,240,.45)'; g.strokeStyle='#ffa6f0'; g.lineWidth=6; g.setLineDash([]); for(const q of overlay.parcels) if(PRIJ1.includes(q.k)) for(const r of q.r){ path(g,r); g.fill(); g.stroke(); } g.restore();
+  }
+  if(L.resv){   // rezervované parcely: šikmé šrafování + oranžový obrys (#fc6722)
+    const hp=document.createElement('canvas'); hp.width=hp.height=24; const hc=hp.getContext('2d'); hc.strokeStyle='rgba(252,103,34,.9)'; hc.lineWidth=3.5; hc.beginPath(); hc.moveTo(-4,28); hc.lineTo(28,-4); hc.moveTo(-4,16); hc.lineTo(16,-4); hc.moveTo(8,28); hc.lineTo(28,8); hc.stroke();
+    g.save(); g.fillStyle=g.createPattern(hp,'repeat'); for(const q of overlay.parcels) if(RESV.includes(q.k)) for(const r of q.r){ path(g,r); g.fill(); }
+    g.strokeStyle='#fc6722'; g.lineWidth=6; g.setLineDash([]); for(const q of overlay.parcels) if(RESV.includes(q.k)) for(const r of q.r){ path(g,r); g.stroke(); } g.restore();
+  }
+  if(L.sale){   // k prodeji: dosud neprodané parcely areálu
+    g.save(); g.fillStyle='rgba(61,220,132,.22)'; g.strokeStyle='#3ddc84'; g.lineWidth=5; g.setLineDash([16,8]); for(const q of overlay.parcels) if(SALE.includes(q.k)) for(const r of q.r){ path(g,r); g.fill(); g.stroke(); } g.restore();   // včetně parcel perimetru campusu (Amtech je hypotetický scénář, parcely jsou pořád k prodeji)
+    { const pt=overlay.parcels.find(q=>q.c==='paterni'); if(pt){ g.save(); g.beginPath(); for(const q of overlay.parcels) if(q.c==='paterni') for(const r of q.r){ r.forEach(([x,y],i)=>{const [a,b]=gisToPx(x,y); i?g.lineTo(a,b):g.moveTo(a,b);}); g.closePath(); } g.clip(); g.fillStyle='rgba(61,220,132,.22)'; path(g,overlay.sold16); g.fill(); g.restore(); } }
+  }
+  if(L.sold){   // obrys kolem všech prodaných parcel (společná hranice se nekreslí) a barevné zvýraznění
+    const sets=[[CERV,'rgba(229,57,53,.20)','#e53935'],[NOBI,'rgba(247,198,0,.22)','#f7c600']];
+    for(const [keys,fill,line] of sets){
+      const ps=overlay.parcels.filter(q=>keys.includes(q.k)); if(!ps.length)continue;
+      g.fillStyle=fill; for(const q of ps) for(const r of q.r){ path(g,r); g.fill(); }
+      const cnt=new Map(), key=(a,b)=>{ const f=v=>v.map(t=>Math.round(t*5)/5).join(','); const A=f(a),B=f(b); return A<B?A+'|'+B:B+'|'+A; };
+      for(const q of ps) for(const r of q.r) for(let i=0;i<r.length;i++){ const a=r[i], b=r[(i+1)%r.length]; const kk=key(a,b); cnt.set(kk,{n:(cnt.get(kk)?.n||0)+1,a,b}); }
+      g.save(); g.strokeStyle=line; g.lineWidth=6; g.lineJoin='round'; g.beginPath();
+      for(const {n,a,b} of cnt.values()) if(n===1){ const [x1,y1]=gisToPx(...a),[x2,y2]=gisToPx(...b); g.moveTo(x1,y1); g.lineTo(x2,y2); }
+      g.stroke(); g.restore();
+    }
+  }
+  tex.needsUpdate=true;
+}
+
+// ---------- vegetace a budovy z nDSM ----------
+const vegGroup=new THREE.Group(); world.add(vegGroup);
+const rnd0=seed=>{let s=seed;return()=>(s=(s*16807)%2147483647)/2147483647;};
+function inRectEn(e,n,r,m=0){ return e>=r.e0-m&&e<=r.e1+m&&n>=r.n0-m&&n<=r.n1+m; }
+function buildVeg(){
+  while(vegGroup.children.length){ const o=vegGroup.children.pop(); o.geometry&&o.geometry.dispose(); }
+  const bld=[], veg=[];
+  const nv=(i,j)=>nd[Math.max(0,Math.min(NY-1,j))*NX+Math.max(0,Math.min(NX-1,i))]/10;
+  const isB=new Uint8Array(NX*NY);
+  const clearRings=overlay.parcels.filter(p=>p.k==='7461/6'||p.k==='7461/13').flatMap(p=>p.r);   // hromady suti (potvrzeno)
+  const hallRing=overlay.parcels.find(p=>p.k==='st.2491').r[0];
+  const cleared=(i,j)=>{
+    const [x,y]=toGis(OX+i*PIX,OZ+j*PIX);
+    if(clearRings.some(r=>pip(x,y,r)))return true;
+    if(pip(x,y,overlay.buildingC)||pip(x,y,overlay.buildingJih))return true;   // Budova C a Budova Jih se modelují samostatně
+    if(DESIGN){ if(pip(x,y,hallRing))return true; const [e,n]=gisToEn(x,y); if(PADS.some(p=>inRectEn(e,n,p,6)))return true; }
+    return false;
+  };
+  for(let j=0;j<NY;j++)for(let i=0;i<NX;i++){
+    const n=nv(i,j); if(n<2.5)continue; if(cleared(i,j))continue;
+    let mn=1e9,mx=-1; for(let dj=-1;dj<=1;dj++)for(let di=-1;di<=1;di++){const v=nv(i+di,j+dj);mn=Math.min(mn,v);mx=Math.max(mx,v);}
+    if(n>=3.5 && (mx-mn)<0.9) { isB[j*NX+i]=1; /* šedé objemy okolních budov se nezobrazují (požadavek uživatele) */ }
+  }
+  const inCampusKeep=(i,j)=>{ const [x,y]=toGis(OX+i*PIX,OZ+j*PIX); const [e,n]=gisToEn(x,y); return e>-52&&e<155&&n>-132&&n<86; };   // okolí areálu Amtech: zeleň se ponechává
+  const noTree=(i,j)=>{ const [x,y]=toGis(OX+i*PIX,OZ+j*PIX); const [e,n]=gisToEn(x,y); return e>-130&&e<-28&&n>-190&&n<-84; };   // jižně od Budovy C je podle fotek jen tráva (uživatel)
+  for(let j=0;j<NY-1;j+=2)for(let i=0;i<NX-1;i+=2){
+    let s=0,c=0; for(let dj=0;dj<2;dj++)for(let di=0;di<2;di++){const k=(j+dj)*NX+i+di; const n=nd[k]/10; if(n>=2.5&&!isB[k]&&!cleared(i+di,j+dj)&&!noTree(i+di,j+dj)){s+=n;c++;}}
+    if(c>=2 && inCampusKeep(i+1,j+1)) veg.push([i+1,j+1,s/c]);   // stromy mimo areál Amtech se neukazují (požadavek uživatele)
+  }
+  const rnd=rnd0(7);
+  const bg=new THREE.BoxGeometry(PIX,1,PIX); bg.translate(0,.5,0);
+  const bm=new THREE.InstancedMesh(bg,new THREE.MeshStandardMaterial({color:0xb7bec6,roughness:.9}),bld.length);
+  const m4=new THREE.Matrix4(), q=new THREE.Quaternion(), sv=new THREE.Vector3(), pv=new THREE.Vector3();
+  bld.forEach(([i,j,n],k)=>{ const X=OX+i*PIX, Z=OZ+j*PIX; pv.set(X,H(i,j)-Z0,Z); sv.set(1,n,1); m4.compose(pv,q,sv); bm.setMatrixAt(k,m4); });
+  bm.castShadow=true; bm.receiveShadow=true; vegGroup.add(bm);
+  const tg=new THREE.IcosahedronGeometry(1,1); tg.translate(0,.5,0);
+  const tm=new THREE.InstancedMesh(tg,new THREE.MeshStandardMaterial({roughness:1,flatShading:true}),veg.length);
+  const col=new THREE.Color();
+  veg.forEach(([i,j,h],k)=>{
+    const X=OX+i*PIX+(rnd()-.5)*2, Z=OZ+j*PIX+(rnd()-.5)*2, r=1.8+rnd()*1.0;
+    pv.set(X,ground(X,Z)-Z0+h*0.18,Z); sv.set(r,h*0.8,r); q.setFromEuler(new THREE.Euler(0,rnd()*6.28,0)); m4.compose(pv,q,sv); tm.setMatrixAt(k,m4);
+    col.setHSL(.27+rnd()*.07,.45+rnd()*.15,.20+rnd()*.12); tm.setColorAt(k,col);
+  });
+  tm.castShadow=true; tm.receiveShadow=true; vegGroup.add(tm);
+  // pás stromů na severní hranici (zelená čára od uživatele; výška stromů je odhad)
+  {
+    const xs0=-540993;
+    const vs=['7461/6','7461/7'].flatMap(k=>overlay.parcels.find(p=>p.k===k).r[0]).filter(p=>p[1]>-1179792&&p[0]>=xs0).sort((a,b)=>a[0]-b[0]);
+    const line=[[xs0,-1179773.3],...vs.filter((p,i)=>i===0||Math.abs(p[0]-vs[i-1][0])>1)];
+    const rr=rnd0(11); const items=[];
+    for(const off of [3.5,8.5]) for(let i=0;i<line.length-1;i++){
+      const [x1,y1]=line[i],[x2,y2]=line[i+1], len=Math.hypot(x2-x1,y2-y1), ux=(x2-x1)/len, uy=(y2-y1)/len;
+      for(let d=(off>5?2.3:0);d<len;d+=4.6+rr()*1.2){
+        const x=x1+ux*d+uy*off, y=y1+uy*d-ux*off, [e,n]=gisToEn(x,y);
+        if(DESIGN&&PADS.some(p=>inRectEn(e,n,p,0)))continue;
+        items.push([x,y,9+rr()*4,2.3+rr()*0.9]);
+      }
+    }
+    const bt=new THREE.InstancedMesh(tg,new THREE.MeshStandardMaterial({roughness:1,flatShading:true}),items.length);
+    items.forEach(([x,y,h,r],k)=>{ const [X,Z]=toLocal(x,y); pv.set(X,ground(X,Z)-Z0+h*0.18,Z); sv.set(r,h*0.8,r); m4.compose(pv,q,sv); bt.setMatrixAt(k,m4); col.setHSL(.27+rr()*.06,.5,.22+rr()*.1); bt.setColorAt(k,col); });
+    bt.castShadow=true; bt.receiveShadow=true; vegGroup.add(bt);
+  }
+}
+
+// ---------- návrh: budovy a výsadba ----------
+const designGroup=new THREE.Group(); world.add(designGroup);
+function applyVeg(){ vegGroup.visible=L.veg; designGroup.traverse(o=>{ if(o.userData&&o.userData.veg) o.visible=L.veg&&L.bAmtech; }); }   // zeleň návrhu jen s vrstvou Klient: Amtech   // zeleň = stávající (okolí, severní pás) i nově navržená výsadba
+const M={
+  clad:new THREE.MeshStandardMaterial({color:0x3a4047,roughness:.72,metalness:.25}),
+  cladL:new THREE.MeshStandardMaterial({color:0x4b535b,roughness:.7,metalness:.25}),
+  glass:new THREE.MeshStandardMaterial({color:0x8db6cc,roughness:.08,metalness:.65,transparent:true,opacity:.6}),
+  dark:new THREE.MeshStandardMaterial({color:0x151a1f,roughness:.25,metalness:.6}),
+  wood:new THREE.MeshStandardMaterial({color:0xb8662c,roughness:.55,metalness:.15}),
+  steel:new THREE.MeshStandardMaterial({color:0x8a9096,roughness:.45,metalness:.8}),
+  taupe:new THREE.MeshStandardMaterial({color:0xa79c8e,roughness:.9}),
+  pv:new THREE.MeshStandardMaterial({color:0x1f3550,roughness:.3,metalness:.6}),
+  door:new THREE.MeshStandardMaterial({color:0x2a2f35,roughness:.5,metalness:.4})
+};
+const logoTex=(()=>{ const c=document.createElement('canvas'); c.width=c.height=256; const x=c.getContext('2d');
+  x.fillStyle='#1491F9'; x.beginPath(); x.arc(128,128,126,0,7); x.fill();
+  x.strokeStyle='#fff'; x.lineWidth=16; x.lineCap='round'; x.beginPath(); x.moveTo(128,48); x.lineTo(76,190); x.moveTo(128,48); x.lineTo(180,190); x.moveTo(100,140); x.lineTo(156,140); x.stroke();
+  x.fillStyle='#fff'; for(const [a,b] of [[128,48],[76,190],[180,190]]){ x.beginPath(); x.arc(a,b,13,0,7); x.fill(); }
+  const t=new THREE.CanvasTexture(c); t.colorSpace=THREE.SRGBColorSpace; return t; })();
+function box(grp,w,h,d,mat,x,y,z,shadow=true){ const m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),mat); m.position.set(x,y,z); m.castShadow=shadow; m.receiveShadow=true; grp.add(m); return m; }
+function strut(grp,p1,p2,mat,t=.5){ const a=new THREE.Vector3(...p1), b=new THREE.Vector3(...p2), len=a.distanceTo(b);
+  const m=new THREE.Mesh(new THREE.BoxGeometry(t,len,t),mat); m.position.copy(a).add(b).multiplyScalar(.5);
+  m.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),b.clone().sub(a).normalize()); m.castShadow=true; grp.add(m); }
+function makeA(b){
+  const L_=b.e1-b.e0, W=b.n1-b.n0, Hg=4.4, Hu=4.8, c=(b.id==='A3'?6:8); const g_=new THREE.Group();
+  box(g_,L_,Hu,W,M.clad,0,Hg+Hu/2,0);                                  // horní grafitový objem (konzola)
+  box(g_,L_+.3,.35,W+.3,M.cladL,0,Hg+Hu+.17,0);                        // atika
+  box(g_,10,Hg,W-6,M.taupe,-L_/2+5,Hg/2,0);                             // sokl / jádro
+  box(g_,L_-c-11,Hg-.2,W-6,M.glass,-L_/2+10+(L_-c-11)/2,Hg/2,0,false);  // prosklené přízemí
+  const nb=Math.max(2,Math.round(W/10));
+  for(let i=0;i<nb;i++){ const z=-W/2+(i+.5)*W/nb, xb=L_/2-c/2;        // A-vzpěry (motiv loga Amtech)
+    strut(g_,[xb,0,z],[L_/2-.6,Hg,z],M.wood); strut(g_,[xb,0,z],[L_/2-c+.6,Hg,z],M.wood); box(g_,.9,.5,.9,M.steel,xb,.25,z); }
+  const wy=Hg+Hu*.55;
+  for(const s of [-1,1]) box(g_,L_*.72,1.5,.15,M.dark,-L_*.06,wy,s*(W/2+.06),false);   // pásová okna
+  box(g_,.15,1.5,W*.62,M.dark,L_/2+.06,wy,0,false);
+  const lg=new THREE.Mesh(new THREE.PlaneGeometry(4.2,4.2),new THREE.MeshBasicMaterial({map:logoTex,transparent:true}));   // logo
+  lg.rotation.y=Math.PI/2; lg.position.set(L_/2+.14,Hg+Hu-2.6,-W/2+5); g_.add(lg);
+  const ls=new THREE.Mesh(new THREE.PlaneGeometry(4.2,4.2),new THREE.MeshBasicMaterial({map:logoTex,transparent:true}));   // logo i na jižní fasádě
+  ls.position.set(L_/2-6,Hg+Hu-2.6,W/2+.14); g_.add(ls);
+  return {g:g_,top:Hg+Hu};
+}
+function makeB(b){
+  const L_=b.e1-b.e0, W=b.n1-b.n0, Hh=b.h; const g_=new THREE.Group();
+  box(g_,L_,Hh,W,M.clad,0,Hh/2,0); box(g_,L_+.3,.35,W+.3,M.cladL,0,Hh+.17,0); box(g_,L_+.2,1.1,W+.2,M.taupe,0,.55,0);
+  const stripe=new THREE.MeshBasicMaterial({color:0xe6b800});
+  if(W>L_){   // dlouhá hala: pásová okna na dlouhých (východní a západní) fasádách, vrata pro expedici na východní straně (dvůr PA)
+    const nw=Math.max(3,Math.floor(W/14));
+    for(let i=0;i<nw;i++){ const z=-W/2+(i+.5)*W/nw; for(const s of [-1,1]) box(g_,.15,1.7,W/nw*.62,M.dark,s*(L_/2+.06),Hh*.66,z,false); }
+    const nd_=Math.max(2,Math.floor((W-36)/16));
+    for(let i=0;i<nd_;i++){ const z=-W/2+30+i*16+4; box(g_,.2,5,5.2,M.door,L_/2+.1,2.5,z,false); box(g_,.22,.35,5.4,stripe,L_/2+.11,5.1,z,false); }
+  } else {
+    const nw=Math.max(3,Math.floor(L_/14));
+    for(let i=0;i<nw;i++){ const x=-L_/2+(i+.5)*L_/nw; for(const s of [-1,1]) box(g_,L_/nw*.62,1.7,.15,M.dark,x,Hh*.66,s*(W/2+.06),false); }
+    const nd_=Math.max(2,Math.floor(L_/22));
+    for(let i=0;i<nd_;i++){ const x=-L_/2+(i+.5)*L_/nd_; box(g_,5.2,5,.2,M.door,x,2.5,W/2+.1,false); box(g_,5.4,.35,.22,stripe,x,5.1,W/2+.11,false); }
+  }
+  box(g_,L_*.72,.12,W*.58,M.pv,0,Hh+.42,0,false);                         // FVE na střeše
+  // vstupní portál s A-vzpěrami na východní straně
+  box(g_,.2,4.6,12,M.glass,L_/2+.1,2.3,-W/2+8,false); box(g_,7,.4,12.5,M.cladL,L_/2+3.2,4.8,-W/2+8);
+  for(const z of [-W/2+3,-W/2+13]){ strut(g_,[L_/2+3.2,0,z],[L_/2+6.4,4.8,z],M.wood); strut(g_,[L_/2+3.2,0,z],[L_/2+.2,4.8,z],M.wood); }
+  const lg=new THREE.Mesh(new THREE.PlaneGeometry(4.6,4.6),new THREE.MeshBasicMaterial({map:logoTex,transparent:true})); lg.rotation.y=Math.PI/2; lg.position.set(L_/2+.14,Hh-3,-W/2+8); g_.add(lg);
+  const ls=new THREE.Mesh(new THREE.PlaneGeometry(6,6),new THREE.MeshBasicMaterial({map:logoTex,transparent:true}));   // logo i na jižním štítu (pohled od vjezdu)
+  ls.position.set(L_/2-9,Hh-4,W/2+.14); g_.add(ls);
+  const ls2=ls.clone(); ls2.position.set(-L_/2+9,Hh-4,W/2+.14); g_.add(ls2);
+  return {g:g_,top:Hh};
+}
+
+// ---------- naváděcí systém podle cedule u Amtechu (bílý panel, modré logo, modrý pruh, řádky s šipkami) ----------
+function signTexture(rows){
+  const c=document.createElement('canvas'); c.width=512; c.height=800; const x=c.getContext('2d');
+  x.fillStyle='#f4f5f6'; x.fillRect(0,0,512,800); x.strokeStyle='#c9ced3'; x.lineWidth=6; x.strokeRect(3,3,506,794);
+  x.fillStyle='#1491F9'; x.beginPath(); x.arc(256,86,52,0,7); x.fill();
+  x.strokeStyle='#fff'; x.lineWidth=7; x.lineCap='round'; x.beginPath(); x.moveTo(256,46); x.lineTo(232,118); x.moveTo(256,46); x.lineTo(280,118); x.moveTo(242,92); x.lineTo(270,92); x.stroke();
+  x.fillStyle='#6b7782'; x.font='600 26px -apple-system,Helvetica,Arial'; x.textAlign='center'; x.fillText('Amtech',256,170);
+  x.fillStyle='#1491F9'; x.fillRect(24,186,464,16); x.textAlign='left';
+  rows.forEach((r,i)=>{ const y=222+i*112;
+    x.strokeStyle='#d5d9dd'; x.lineWidth=2; x.beginPath(); x.moveTo(24,y+104); x.lineTo(488,y+104); x.stroke();
+    x.fillStyle='#14202b'; x.font='700 33px -apple-system,Helvetica,Arial'; x.fillText(r.cz,30,y+44);
+    x.fillStyle='#6b7782'; x.font='400 24px -apple-system,Helvetica,Arial'; x.fillText(r.en,30,y+78);
+    if(r.p){ x.fillStyle='#1b64c8'; x.fillRect(334,y+22,52,52); x.fillStyle='#fff'; x.font='700 40px -apple-system,Helvetica,Arial'; x.fillText('P',346,y+62); }
+    x.fillStyle='#14202b'; x.strokeStyle='#14202b'; x.lineWidth=7; x.lineCap='round'; x.lineJoin='round'; const ax=448, ay=y+48; x.beginPath();
+    if(r.a==='→'){ x.moveTo(ax-30,ay); x.lineTo(ax+22,ay); x.moveTo(ax+4,ay-17); x.lineTo(ax+24,ay); x.lineTo(ax+4,ay+17); }
+    else if(r.a==='←'){ x.moveTo(ax+30,ay); x.lineTo(ax-22,ay); x.moveTo(ax-4,ay-17); x.lineTo(ax-24,ay); x.lineTo(ax-4,ay+17); }
+    else { x.moveTo(ax,ay+26); x.lineTo(ax,ay-24); x.moveTo(ax-17,ay-6); x.lineTo(ax,ay-26); x.lineTo(ax+17,ay-6); }
+    x.stroke(); });
+  const t=new THREE.CanvasTexture(c); t.colorSpace=THREE.SRGBColorSpace; t.anisotropy=8; return t;
+}
+function makeSign(rows){
+  const g_=new THREE.Group(), h=Math.max(1.6,0.62+rows.length*.34)*1.0, w=1.6, hp=2.55*(0.62+rows.length*.34)/(0.62+5*.34)+.6;
+  const tex_=signTexture(rows);
+  const panel=new THREE.Mesh(new THREE.PlaneGeometry(1.6,2.5),new THREE.MeshBasicMaterial({map:tex_})); panel.position.set(0,2.35,.06); g_.add(panel);
+  const back=new THREE.Mesh(new THREE.PlaneGeometry(1.6,2.5),new THREE.MeshStandardMaterial({color:0xe9ecee,roughness:.6})); back.rotation.y=Math.PI; back.position.set(0,2.35,-.06); g_.add(back);
+  box(g_,1.64,2.54,.1,new THREE.MeshStandardMaterial({color:0xcfd4d8,roughness:.5,metalness:.4}),0,2.35,0);
+  for(const sx of [-.55,.55]){ const p=new THREE.Mesh(new THREE.CylinderGeometry(.05,.05,3.7,10),new THREE.MeshStandardMaterial({color:0xe8ebed,roughness:.4,metalness:.5})); p.position.set(sx,1.85,-.12); p.castShadow=true; g_.add(p); }
+  return g_;
+}
+const SIGNS=[   // [e, n, azimut normály (směr pohledu řidiče ke ceduli), řádky]
+  {e:88,n:-106,az:225,rows:[{cz:'Expedice / Sklad',en:'Shipping / Warehouse',a:'←'},{cz:'Recepce / Showroom',en:'Reception / Showroom',a:'↑'},{cz:'Parkování hosté',en:'Guest parking',a:'↑',p:1},{cz:'Parkování zaměstnanci',en:'Employee parking',a:'→',p:1}]},
+  {e:103,n:-14,az:180,rows:[{cz:'Recepce / Showroom',en:'Reception / Showroom',a:'↑'},{cz:'Parkování hosté',en:'Guest parking',a:'↑',p:1},{cz:'Parkování zaměstnanci',en:'Employee parking',a:'→',p:1},{cz:'Náměstí / Campus hub',en:'Plaza / Campus hub',a:'←'},{cz:'R&D / Kanceláře',en:'R&D / Offices',a:'←'}]},
+  {e:94,n:-26,az:180,rows:[{cz:'Expedice / Sklad',en:'Shipping / Warehouse',a:'←'},{cz:'Nákladní vjezd',en:'Truck entrance',a:'←'}]}
+];
+function buildDesign(){
+  while(designGroup.children.length){ designGroup.remove(designGroup.children[0]); }
+  for(const b of BLD){
+    const r=(b.type==='A'?makeA(b):makeB(b)); const [X,Z]=enToLocal((b.e0+b.e1)/2,(b.n0+b.n1)/2);
+    r.g.position.set(X,b.level-Z0,Z); r.g.rotation.y=-GRID*Math.PI/180; r.g.userData.top=r.top; b.top=r.top; designGroup.add(r.g);
+  }
+  // naváděcí systém u vjezdu a na křižovatkách
+  for(const s of SIGNS){ const sg=makeSign(s.rows); const [X,Z]=enToLocal(s.e,s.n); const [x,y]=enToGis(s.e,s.n);
+    sg.position.set(X,ground(X,Z)-Z0,Z); sg.rotation.y=(Math.PI-s.az*Math.PI/180)-GRID*Math.PI/180; designGroup.add(sg); }
+  // nová výsadba
+  const rr=rnd0(23); const items=[];
+  const notInB=(e,n)=>{ const [x,y]=enToGis(e,n); return distToHV(x,y)>HV_BAND && notInB0(e,n); };
+  const notInB0=(e,n)=>!BLD.some(b=>inRectEn(e,n,b,2.5))&&!SURF.some(s=>!s.park&&s.id!=='plaza'&&s.id!=='prom1'&&s.id!=='prom2'&&inRectEn(e,n,s,0))&&!SURF.some(s=>s.park&&inRectEn(e,n,s,0));
+  const add=(e,n,h,r)=>{ if(notInB(e,n)) items.push([e,n,h,r]); };
+  for(let i=0;i<20;i++) add(28+rr()*54,37+rr()*26,6+rr()*4,1.6+rr()*.8);                 // náměstí
+  for(let n=-110;n<-14;n+=8) add(111.5+rr(),n+rr()*3,7+rr()*4,1.8+rr()*.7);               // aleje podél páteřní komunikace
+  for(let e=90;e<134;e+=7) add(e+rr()*2,68+rr()*2,8+rr()*3,2+rr()*.7);                    // za parkovištěm P2
+  const tg=new THREE.IcosahedronGeometry(1,1); tg.translate(0,.5,0);
+  const tm=new THREE.InstancedMesh(tg,new THREE.MeshStandardMaterial({roughness:1,flatShading:true}),items.length);
+  const m4=new THREE.Matrix4(), q=new THREE.Quaternion(), sv=new THREE.Vector3(), pv=new THREE.Vector3(), col=new THREE.Color();
+  items.forEach(([e,n,h,r],k)=>{ const [X,Z]=enToLocal(e,n); pv.set(X,ground(X,Z)-Z0+h*0.2,Z); sv.set(r,h*0.8,r); m4.compose(pv,q,sv); tm.setMatrixAt(k,m4); col.setHSL(.24+rr()*.08,.5,.28+rr()*.1); tm.setColorAt(k,col); });
+  tm.castShadow=true; tm.receiveShadow=true; tm.userData.veg=true; designGroup.add(tm); applyVeg(); applyBuildings();
+}
+
+// ---------- vedení VVN 110 kV ve 3D (výška stožárů a vodičů je odhad) ----------
+const powerGroup=new THREE.Group(); world.add(powerGroup);
+function buildPower(){
+  while(powerGroup.children.length){ powerGroup.remove(powerGroup.children[0]); }
+  const mSteel=new THREE.MeshStandardMaterial({color:0xb9bec4,roughness:.6,metalness:.5,wireframe:true}), mRed=new THREE.MeshStandardMaterial({color:0xd8332b,roughness:.6}), mWhite=new THREE.MeshStandardMaterial({color:0xf2f2f2,roughness:.6});
+  const HP=40, arms=[[22,5.5],[29,5],[36,4]];   // [výška nad terénem, rozpětí od osy]
+  const nodes=PYL.map(([x,y])=>{ const [X,Z]=toLocal(x,y); return {X,Z,gy:ground(X,Z)-Z0}; });
+  for(const p of nodes){
+    const gp=new THREE.Group(); gp.position.set(p.X,p.gy,p.Z);
+    const mast=new THREE.Mesh(new THREE.CylinderGeometry(.35,1.9,HP,4,6,true),mSteel); mast.position.y=HP/2; mast.rotation.y=Math.PI/4; gp.add(mast);
+    for(const [h,w] of arms){ const a=new THREE.Mesh(new THREE.BoxGeometry(2*w,.16,.16),new THREE.MeshStandardMaterial({color:0x8e949a,metalness:.5,roughness:.6})); a.position.y=h; gp.add(a); }
+    for(let i=0;i<4;i++){ const c=new THREE.Mesh(new THREE.CylinderGeometry(.5,.55,1.6,8),i%2?mWhite:mRed); c.position.y=HP-1.25-i*2.5-8; gp.add(c); }   // červenobílé značení (letecká překážka)
+    gp.traverse(o=>{o.castShadow=true}); powerGroup.add(gp);
+  }
+  const cm=new THREE.LineBasicMaterial({color:0x2a2e33});
+  const spans=[]; for(let i=0;i<nodes.length-1;i++) spans.push([nodes[i],nodes[i+1]]);
+  const [bx,by]=HV[0]; const [BX,BZ]=toLocal(bx,by); spans.unshift([{X:BX,Z:BZ,gy:ground(BX,BZ)-Z0,end:true},nodes[0]]);
+  for(const [A,B] of spans){
+    const dx=B.X-A.X,dz=B.Z-A.Z,len=Math.hypot(dx,dz),px=-dz/len,pz=dx/len;   // kolmice
+    for(const side of [-1,1]) for(const [h,w] of arms){
+      const pts=[]; for(let k=0;k<=24;k++){ const t=k/24, X=A.X+dx*t+px*w*side, Z=A.Z+dz*t+pz*w*side, sag=4*Math.pow(len/220,2)*4*t*(1-t);
+        pts.push(new THREE.Vector3(X,(A.gy+(B.gy-A.gy)*t)+h-sag,Z)); }
+      powerGroup.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts),cm));
+    }
+  }
+}
+
+// ---------- Budova C (SPV XI): existující, podle katastru (st. 1419/1) a dokumentace; střechy pilovité (sheds) ----------
+const cGroup=new THREE.Group(); world.add(cGroup); let CINFO=null;
+const MC={ plaster:new THREE.MeshStandardMaterial({color:0xd7cfc0,roughness:.95}), brick:new THREE.MeshStandardMaterial({color:0x8c5a45,roughness:.9}),
+  roof:new THREE.MeshStandardMaterial({color:0x5d6165,roughness:.85,side:THREE.DoubleSide,flatShading:true}), glass:new THREE.MeshStandardMaterial({color:0x8fa7b3,roughness:.15,metalness:.5}),
+  win:new THREE.MeshStandardMaterial({color:0x1c2429,roughness:.3,metalness:.4}) };
+function prismGeo(x0,x1,z0,z1,h){   // sheds: svislé prosklené čelo na severu (z0), střecha klesá k jihu (z1)
+  const v=[[x0,0,z0],[x1,0,z0],[x0,h,z0],[x1,h,z0],[x0,0,z1],[x1,0,z1]], tri=[[2,3,5],[2,5,4],[0,2,4],[1,5,3]], pos=[];
+  for(const t of tri) for(const i of t) pos.push(...v[i]); const g_=new THREE.BufferGeometry(); g_.setAttribute('position',new THREE.Float32BufferAttribute(pos,3)); g_.computeVertexNormals(); return g_; }
+function buildC(){
+  while(cGroup.children.length){ cGroup.remove(cGroup.children[0]); }
+  const en=overlay.buildingC.map(([x,y])=>gisToEn(x,y)); const es=en.map(p=>p[0]), ns=en.map(p=>p[1]);
+  const ec=(Math.min(...es)+Math.max(...es))/2, nc=(Math.min(...ns)+Math.max(...ns))/2;
+  let sum=0,cnt=0,mn=1e9; for(let e=Math.min(...es);e<=Math.max(...es);e+=4)for(let n=Math.min(...ns);n<=Math.max(...ns);n+=4){ const [x,y]=enToGis(e,n); if(!pip(x,y,overlay.buildingC))continue; const [X,Z]=toLocal(x,y); const gz=ground(X,Z); sum+=gz; cnt++; mn=Math.min(mn,gz); }
+  const level=sum/cnt; CINFO={level,ec,nc};
+  const g_=new THREE.Group(); const [X,Z]=enToLocal(ec,nc); g_.position.set(X,0,Z); g_.rotation.y=-GRID*Math.PI/180;
+  const rel=(e,n)=>[e-ec,-(n-nc)];          // lokální x = východ, z = jih
+  const baseY=mn-Z0-1.0, eave=level-Z0+6.4;
+  const shape=new THREE.Shape(); en.forEach(([e,n],i)=>{ i?shape.lineTo(e-ec,n-nc):shape.moveTo(e-ec,n-nc); });
+  const walls=new THREE.Mesh(new THREE.ExtrudeGeometry(shape,{depth:eave-baseY,bevelEnabled:false}),MC.plaster); walls.geometry.rotateX(-Math.PI/2); walls.position.y=baseY; walls.castShadow=walls.receiveShadow=true; g_.add(walls);
+  const bx=(e0,e1,n0,n1,h0,h1,mat)=>{ const [x0,z0]=rel(e0,n1),[x1,z1]=rel(e1,n0); const m=new THREE.Mesh(new THREE.BoxGeometry(x1-x0,h1-h0,z1-z0),mat); m.position.set((x0+x1)/2,(h0+h1)/2,(z0+z1)/2); m.castShadow=m.receiveShadow=true; g_.add(m); return m; };
+  const L0=level-Z0;
+  bx(-142,-89,-39,-20,baseY,L0+7.4,MC.plaster); bx(-142,-89,-39,-20,L0+7.4,L0+7.7,MC.roof);            // severozápadní přístavba, omítka, plochá střecha
+  bx(-72,-31,-91,-40,eave-.01,L0+8.4,MC.plaster);                                                      // východní hala (světlá výška 7,3 m)
+  const teeth=(e0,e1,n0,n1,y0)=>{ const per=6, nT=Math.floor((n1-n0)/per); for(let i=0;i<nT;i++){ const nn=n1-i*per; const [x0,z0]=rel(e0,nn),[x1,z1]=rel(e1,nn-per);
+      const t=new THREE.Mesh(prismGeo(x0,x1,z0,z1,2.2),MC.roof); t.position.y=y0; t.castShadow=true; t.receiveShadow=true; g_.add(t);
+      const gl=new THREE.Mesh(new THREE.BoxGeometry(x1-x0-.6,1.7,.1),MC.glass); gl.position.set((x0+x1)/2,y0+1.15,z0+.06); g_.add(gl); } };
+  bx(-115,-72,-91,-40,eave-.01,eave+.4,MC.roof); bx(-72,-31,-91,-40,L0+8.4,L0+8.8,MC.roof);          // ploché střechy (z fotek), 3 prosklené světlíky
+  for(const [nn,ea,eb,yy] of [[-52,-112,-76,eave+.4],[-62,-112,-76,eave+.4],[-72,-112,-76,eave+.4],[-50,-69,-35,L0+8.8],[-62,-69,-35,L0+8.8],[-74,-69,-35,L0+8.8]]){ const [x0,z0]=rel(ea,nn),[x1]=rel(eb,nn); const gv=[[x0,0,z0-1.8],[x0,0,z0+1.8],[x0,1.7,z0],[x1,0,z0-1.8],[x1,0,z0+1.8],[x1,1.7,z0]], tri=[[0,3,5],[0,5,2],[1,2,5],[1,5,4],[0,2,1],[3,4,5]], ps=[]; for(const t of tri) for(const i of t) ps.push(...gv[i]);
+    const gg=new THREE.BufferGeometry(); gg.setAttribute('position',new THREE.Float32BufferAttribute(ps,3)); gg.computeVertexNormals(); const m=new THREE.Mesh(gg,new THREE.MeshStandardMaterial({color:0x8fa7b3,roughness:.2,metalness:.5,side:THREE.DoubleSide,flatShading:true})); m.position.y=yy; m.castShadow=true; g_.add(m); }
+  bx(-115,-52,-91.35,-90.65,baseY,L0+3.0,MC.brick);                                                    // cihlový sokl jižní fasády
+  bx(-115.35,-114.65,-68,-62,L0-.2,L0+4,MC.win);                                                       // vjezd/tunel v západním štítu
+  bx(-118,-98,-39.6,-37.2,L0+3.6,L0+4.0,MC.roof); for(const ee of [-114,-108,-102]) bx(ee-1.5,ee+1.5,-39.1,-38.9,L0+.2,L0+3.4,new THREE.MeshStandardMaterial({color:0x2b5fa8,roughness:.5}));  // kryté rampy s modrými vraty
+  { const [x0,z0]=rel(-125,-30),[x1,z1]=rel(-152,-39); }
+  bx(-152,-125,-39,-30,eave-.01,eave+.35,MC.roof);
+  for(const [e0,e1,n0,n1,h] of [[-110,-36,-91.3,-90.9,L0+3.2]]) bx(e0,e1,n0,n1,h,h+1.4,MC.win);       // pásová okna na jižní fasádě
+  bx(-30.8,-30.4,-85,-47,L0+3.2,L0+4.6,MC.win);                                                         // východní fasáda (k campusu)
+  bx(-90.5,-86,-49,-44.5,baseY,L0+17,MC.brick); bx(-91,-85.5,-49.5,-44,L0+17,L0+17.9,MC.plaster);       // cihlová věž (výška odhad podle dronových snímků)
+  cGroup.add(g_);
+}
+
+// ---------- Budova Jih (SPV Budova Jih): existující, 3 podlaží; obrys podle ortofota a katastru (st. 1419/2), vzhled podle dronové fotky ----------
+const jGroup=new THREE.Group(); world.add(jGroup); let JINFO=null;
+function buildJih(){
+  while(jGroup.children.length){ jGroup.remove(jGroup.children[0]); }
+  const ring=overlay.buildingJih; const en=ring.map(([x,y])=>gisToEn(x,y)); const es=en.map(p=>p[0]), ns=en.map(p=>p[1]);
+  const ec=(Math.min(...es)+Math.max(...es))/2, nc=(Math.min(...ns)+Math.max(...ns))/2;
+  let sum=0,cnt=0,mn=1e9; for(let e=-290;e<=-197;e+=4)for(let n=-184;n<=-120;n+=4){ const [x,y]=enToGis(e,n); const [X,Z]=toLocal(x,y); const gz=ground(X,Z); sum+=gz; cnt++; mn=Math.min(mn,gz); }
+  const level=sum/cnt; JINFO={level,ec,nc}; const L0=level-Z0, baseY=mn-Z0-1.0;
+  const g_=new THREE.Group(); const [X,Z]=enToLocal(ec,nc); g_.position.set(X,0,Z); g_.rotation.y=-GRID*Math.PI/180;
+  const rel=(e,n)=>[e-ec,-(n-nc)];
+  const bx=(e0,e1,n0,n1,h0,h1,mat)=>{ const [x0,z0]=rel(e0,n1),[x1,z1]=rel(e1,n0); const m=new THREE.Mesh(new THREE.BoxGeometry(x1-x0,h1-h0,z1-z0),mat); m.position.set((x0+x1)/2,(h0+h1)/2,(z0+z1)/2); m.castShadow=m.receiveShadow=true; g_.add(m); return m; };
+  const cream=new THREE.MeshStandardMaterial({color:0xe6e1d4,roughness:.95}), ochre=new THREE.MeshStandardMaterial({color:0xd9b46a,roughness:.8}), brick=new THREE.MeshStandardMaterial({color:0x9a5240,roughness:.9}), roof=new THREE.MeshStandardMaterial({color:0x4b4f53,roughness:.9}), win=new THREE.MeshStandardMaterial({color:0x1d2a36,roughness:.25,metalness:.5});
+  const H=11.8;
+  bx(-290,-197,-184,-120,baseY,L0+H,cream); bx(-290.3,-196.7,-184.3,-119.7,L0+H,L0+H+.35,roof);                 // hlavní hala (3 podlaží)
+  bx(-295,-214,-120,-108,baseY,L0+9,cream); bx(-295.3,-213.7,-120.3,-107.7,L0+9,L0+9.35,roof);                  // severní pás (schodiště, kanceláře)
+  bx(-245,-219,-109,-88,baseY,L0+12.6,cream); bx(-245.3,-218.7,-109.3,-87.7,L0+12.6,L0+12.95,roof);            // severní nástavba
+  bx(-230,-204,-193,-184,baseY,L0+5,cream); bx(-230.3,-203.7,-193.3,-183.7,L0+5,L0+5.3,roof);                   // jižní přístavek
+  for(const e of [-274,-243,-207]) bx(e-2,e+2,-125,-121,L0+H+.3,L0+H+3,cream);                                   // strojovny/lanové šachty na střeše
+  for(const lv of [4.0,7.9]){                                                                                    // pásová okna: jižní fasáda (hlavní pohled) a štíty
+    bx(-286,-200,-184.25,-183.85,L0+lv,L0+lv+1.35,win); bx(-286,-200,-184.28,-183.9,L0+lv-.95,L0+lv-.1,ochre);
+    bx(-196.8,-196.4,-180,-124,L0+lv,L0+lv+1.35,win); bx(-290.4,-290,-180,-124,L0+lv,L0+lv+1.35,win); }
+  for(const e of [-262,-238,-214]) bx(e-1.6,e+1.6,-184.45,-183.7,baseY,L0+H,brick);                              // cihlové pilíře a schodišťové věže
+  cGroup.parent&&0; jGroup.add(g_);
+}
+
+// ---------- st. 1419/18: stavba pro výrobu a skladování (existující), 4 306 m², výška ~6,5 m z modelu povrchu ----------
+const xGroup=new THREE.Group(); world.add(xGroup); let XINFO=null;
+function buildX(){
+  while(xGroup.children.length){ xGroup.remove(xGroup.children[0]); }
+  const ring=overlay.building1419_18; const en=ring.map(([x,y])=>gisToEn(x,y)); const es=en.map(p=>p[0]), ns=en.map(p=>p[1]);
+  const ec=(Math.min(...es)+Math.max(...es))/2, nc=(Math.min(...ns)+Math.max(...ns))/2;
+  let sum=0,cnt=0,mn=1e9; for(let e=Math.min(...es);e<=Math.max(...es);e+=4)for(let n=Math.min(...ns);n<=Math.max(...ns);n+=4){ const [x,y]=enToGis(e,n); if(!pip(x,y,ring))continue; const [X,Z]=toLocal(x,y); const gz=ground(X,Z); sum+=gz; cnt++; mn=Math.min(mn,gz); }
+  const level=sum/cnt; XINFO={level,ec,nc}; const L0=level-Z0, baseY=mn-Z0-1.0, H=6.5;
+  const g_=new THREE.Group(); const [X,Z]=enToLocal(ec,nc); g_.position.set(X,0,Z); g_.rotation.y=-GRID*Math.PI/180;
+  const shape=new THREE.Shape(); en.forEach(([e,n],i)=>{ i?shape.lineTo(e-ec,n-nc):shape.moveTo(e-ec,n-nc); });
+  const walls=new THREE.Mesh(new THREE.ExtrudeGeometry(shape,{depth:L0+H-baseY,bevelEnabled:false}),new THREE.MeshStandardMaterial({color:0xd3d5d4,roughness:.9})); walls.geometry.rotateX(-Math.PI/2); walls.position.y=baseY; walls.castShadow=walls.receiveShadow=true; g_.add(walls);
+  const e0=Math.min(...es)+3, e1=Math.max(...es)-3, n0=Math.min(...ns)+2.5, n1=Math.max(...ns)-2.5, nb=8, w=(e1-e0)/nb;     // střešní pásy (sendvičové panely), z ortofota
+  for(let i=0;i<nb;i++){ const m=new THREE.Mesh(new THREE.BoxGeometry(w-.1,.3,n1-n0),new THREE.MeshStandardMaterial({color:i%2?0xc2c7c9:0xdde0e1,roughness:.8})); m.position.set(e0+w*(i+.5)-ec,L0+H+.15,-((n0+n1)/2-nc)); m.receiveShadow=true; g_.add(m); }
+  xGroup.add(g_);
+}
+
+// ---------- PLÁNOVANÉ: Budova A (GLA 9 551 m², výstavba 2027; obálka 167,6 × 60 m dle půdorysu, umístění východně od parcel A–C, mezi 7461/17 a 7461/5 – ORIENTAČNĚ) ----------
+const planGroup=new THREE.Group(); world.add(planGroup); let PINFO=null;
+// vizuál Budovy A podle renderů a „technical standard“ BPST (zelené svislé pruhy fasády, tmavé atiky, šedý sokl u doků, FV + obloukové světlíky na střeše, administrativa 2NP 45 × 12 m, nádrž SHZ)
+const A_GREENS=['#1d5a37','#27754a','#3a955c','#58b474','#86cf97','#226644','#4aa868','#a3dcb0','#174a2d','#2f8552'];
+function stripeTexture(){
+  const c=document.createElement('canvas'); c.width=512; c.height=128; const x=c.getContext('2d'); let u=0, sd=5; const r=()=>(sd=(sd*16807)%2147483647)/2147483647;
+  while(u<512){ const w=8+Math.floor(r()*26); x.fillStyle=A_GREENS[Math.floor(r()*A_GREENS.length)]; x.fillRect(u,0,w,128); u+=w; }
+  x.strokeStyle='rgba(0,0,0,.20)'; x.lineWidth=1.5; for(let y=0;y<128;y+=16){ x.beginPath(); x.moveTo(0,y); x.lineTo(512,y); x.stroke(); }   // spáry sendvičových panelů po 1 m
+  const gr=x.createLinearGradient(0,0,0,128); gr.addColorStop(0,'rgba(255,255,255,.07)'); gr.addColorStop(1,'rgba(0,0,0,.10)'); x.fillStyle=gr; x.fillRect(0,0,512,128);
+  const t=new THREE.CanvasTexture(c); t.colorSpace=THREE.SRGBColorSpace; t.wrapS=THREE.RepeatWrapping; t.anisotropy=4; return t;
+}
+const A_STRIPE=stripeTexture();
+function stripeMat(len,h=8){ const t=A_STRIPE.clone(); t.needsUpdate=true; t.wrapT=THREE.RepeatWrapping; t.repeat.set(len/26,h/8); return new THREE.MeshStandardMaterial({map:t,roughness:.85}); }
+function makeBudovaA(){
+  const L_=167.6, W=60, FX=45, AD=12, HH=12, HF=11.2, AH=8.2, PL=4.5, g_=new THREE.Group();
+  const X=x=>x-L_/2, Z=y=>W/2-y;                         // x = východ, y = sever od JZ rohu
+  const dark=new THREE.MeshStandardMaterial({color:0x2a2e32,roughness:.7,metalness:.2}), plinthM=new THREE.MeshStandardMaterial({color:0xc3c7cb,roughness:.95}), roofM=new THREE.MeshStandardMaterial({color:0x3c4045,roughness:.9}),
+        glassM=new THREE.MeshStandardMaterial({color:0x1f2e3a,roughness:.2,metalness:.6}), concrete=new THREE.MeshStandardMaterial({color:0xb4b7ba,roughness:1});
+  const box=(x0,x1,y0,y1,z0,z1,mat,mats)=>{ const m=new THREE.Mesh(new THREE.BoxGeometry(x1-x0,z1-z0,y1-y0),mats||mat); m.position.set(X((x0+x1)/2),(z0+z1)/2,Z((y0+y1)/2)); m.castShadow=true; m.receiveShadow=true; g_.add(m); return m; };
+  const wallMats=(lx,lz,h=11.2)=>[stripeMat(lz,h),stripeMat(lz,h),roofM,roofM,stripeMat(lx,h),stripeMat(lx,h)];   // +x, -x, top, bottom, +z(jih), -z(sever)
+  // hlavní hala (x 45–167,6) a přední hala (x 0–45, y 12–60), stejná výška
+  box(FX,L_,0,W,0,HF,null,wallMats(L_-FX,W)); box(0,FX,AD,W,0,HF,null,wallMats(FX,W-AD));
+  box(FX,L_,0,W,HF,HH,dark); box(0,FX,AD,W,HF,HH,dark);                                  // tmavý pás / atika
+  box(FX-.2,L_+.2,-.15,W+.15,HH,HH+.35,roofM);                                           // střešní deska
+  box(-.2,FX+.2,AD-.15,W+.15,HH,HH+.35,roofM);
+  // sokl u doků (jižní stěna hlavní haly, západní stěna přední haly)
+  box(FX,L_,-.12,0.02,0,PL,plinthM); box(-.12,0.02,AD,W,0,PL,plinthM);
+  // doky a vrata
+  for(const u of [50,56,62,68,74]) box(u-1.5,u+1.5,-.3,0,0.4,3.6,dark);
+  for(const u of [18,25,32,39]) box(-.3,0,u-1.5+AD,u+1.5+AD,0.4,3.6,dark);
+  box(80,84.5,-.35,0,0,4.3,new THREE.MeshStandardMaterial({color:0x3f464d})); box(-.35,0,46,50.5,0,4.3,new THREE.MeshStandardMaterial({color:0x3f464d}));
+  // střecha: FV pole + obloukové světlíky
+  const pvM=new THREE.MeshStandardMaterial({color:0x1f3550,roughness:.35,metalness:.55}), skyM=new THREE.MeshStandardMaterial({color:0xbcd2e6,roughness:.2,metalness:.2,transparent:true,opacity:.9});
+  for(let i=0,x0=4;x0<L_-10;x0+=12.5,i++) for(let j=0,y0=4;y0<W-8;y0+=9,j++){
+    if(x0<FX&&y0<AD+2) continue;
+    if((i+j)%3===2) box(x0+1,x0+9.5,y0+2.5,y0+4.9,HH+.35,HH+.95,skyM); else box(x0,x0+9.5,y0,y0+6.6,HH+.35,HH+.6,pvM);
+  }
+  // administrativa 2NP 45 × 12 m (JZ)
+  box(0,FX,0,AD,0,AH-.6,null,wallMats(FX,AD,AH-.6)); box(0,FX,0,AD,AH-.6,AH,dark); box(-.2,FX+.2,-.15,AD+.15,AH,AH+.3,new THREE.MeshStandardMaterial({color:0x4a4e53}));
+  const rib=(x0,x1,z0,z1)=>box(x0,x1,-.28,0,z0,z1,glassM);
+  for(const [a,b] of [[1,17.5],[26.5,44]]){ rib(a,b,1,2.9); rib(a,b,4.7,6.7); }
+  box(19.5,24.5,-.28,0,0.4,3.3,glassM); rib(19.5,24.5,4.7,6.7);                           // vstup + schodiště
+  box(18.5,25.5,-3.2,0,3.5,3.85,new THREE.MeshStandardMaterial({color:0x5a6066}));          // stříška nad vstupem
+  for(const z of [[1,2.9],[4.7,6.7]]) box(-.28,0,AD-11,AD-1,z[0],z[1],glassM);              // západní fasáda přístavku
+  // logo BUSINESS PARK a písmeno A
+  const lc=document.createElement('canvas'); lc.width=1024; lc.height=256; const lx=lc.getContext('2d'); lx.fillStyle='#fff'; lx.font='800 92px Helvetica,Arial,sans-serif'; lx.fillText('BUSINESS PARK',200,120); lx.font='400 52px Helvetica,Arial,sans-serif'; lx.fillText('STARÉ MĚSTO',202,190);
+  lx.beginPath(); lx.moveTo(120,40); lx.bezierCurveTo(60,60,60,110,110,130); lx.bezierCurveTo(150,150,150,190,90,210); lx.lineWidth=26; lx.strokeStyle='#fff'; lx.stroke();
+  const lt=new THREE.CanvasTexture(lc); lt.colorSpace=THREE.SRGBColorSpace;
+  const logo=new THREE.Mesh(new THREE.PlaneGeometry(14,3.5),new THREE.MeshBasicMaterial({map:lt,transparent:true})); logo.position.set(X(30),AH+2.2,Z(AD)-0); logo.position.z=Z(AD-0)+0; logo.position.set(X(12),HF-3,Z(0)+AD*0+0.2+ (W/2-W/2)); g_.add(logo);
+  logo.position.set(X(22),AH-3.0,Z(0)+.35);                                                  // na jižní fasádě administrativy
+  const lc2=document.createElement('canvas'); lc2.width=lc2.height=256; const l2=lc2.getContext('2d'); l2.fillStyle='#fff'; l2.font='800 230px Helvetica,Arial,sans-serif'; l2.textAlign='center'; l2.fillText('A',128,215);
+  const lt2=new THREE.CanvasTexture(lc2); lt2.colorSpace=THREE.SRGBColorSpace; const aL=new THREE.Mesh(new THREE.PlaneGeometry(6,6),new THREE.MeshBasicMaterial({map:lt2,transparent:true})); aL.rotation.y=Math.PI/2; aL.position.set(X(L_)+.3,HF-4.2,Z(W-8)); g_.add(aL);
+  const logo2=logo.clone(); logo2.rotation.y=Math.PI/2; logo2.position.set(X(L_)+.3,HF-5.5,Z(W-22)); g_.add(logo2);
+  // nádrž SHZ + strojovna
+  const tank=new THREE.Mesh(new THREE.CylinderGeometry(5,5,7.5,24),new THREE.MeshStandardMaterial({color:0xc9cdd1,roughness:.7})); tank.position.set(X(173),3.75,Z(52)); tank.castShadow=true; g_.add(tank);
+  box(162,167,48,54,0,3.6,new THREE.MeshStandardMaterial({color:0x9aa0a5}));
+  // zpevněné plochy: manipulační plocha 21 m na západě, jižní plocha u doků, obslužná plocha u SHZ
+  box(-21,0,-19,W,-.2,.1,concrete); box(0,L_+22,-19,0,-.2,.1,concrete); box(L_+2,L_+22,-19,W+2,-.2,.1,concrete);   // zpevněná plocha obtéká východní štít a navazuje na jižní plochu
+  for(let k=0;k<10;k++) box(0.5+k*2.6,0.65+k*2.6,-19,-14,.1,.14,new THREE.MeshBasicMaterial({color:0xf0f0f0}));
+  // modrá fólie na střeše levé jednotky = volné k pronájmu (jako v renderech)
+  const free=new THREE.Mesh(new THREE.BoxGeometry(FX,.15,W-AD+AD),new THREE.MeshBasicMaterial({color:0x2f6db5,transparent:true,opacity:.42})); free.position.set(X(FX/2),HH+1.1,Z(W/2)); g_.add(free);
+  // ---- DETAILY PRO REALISTIČTĚJŠÍ VZHLED ----
+  const rubber=new THREE.MeshStandardMaterial({color:0x151719,roughness:.95}), steel=new THREE.MeshStandardMaterial({color:0x8a9096,roughness:.5,metalness:.7}), white=new THREE.MeshStandardMaterial({color:0xeceff1,roughness:.6});
+  // dock shelters (černé těsnění) + nivelační rampy
+  for(const u of [50,56,62,68,74]) box(u-1.9,u+1.9,-1.0,0,0.2,3.9,rubber);
+  for(const u of [18,25,32,39]) box(-1.0,0,u-1.9+AD,u+1.9+AD,0.2,3.9,rubber);
+  // meziokenní sloupky a rámy administrativy
+  for(let x=1;x<=44;x+=2) for(const [z0,z1] of [[1,2.9],[4.7,6.7]]){ if(x>17.5&&x<26.5) continue; box(x-.04,x+.04,-.3,-.25,z0,z1,steel); }
+  for(const [z0,z1] of [[1,2.9],[4.7,6.7]]){ box(1,17.5,-.31,-.28,z0-.06,z0,steel); box(1,17.5,-.31,-.28,z1,z1+.06,steel); box(26.5,44,-.31,-.28,z0-.06,z0,steel); box(26.5,44,-.31,-.28,z1,z1+.06,steel); }
+  // vstup: dvoukřídlé prosklené dveře + sloupky stříšky
+  box(21,23,-.32,-.28,0.3,3.0,steel); box(18.6,18.8,-3.1,-2.9,0,3.5,steel); box(25.2,25.4,-3.1,-2.9,0,3.5,steel);
+  // velké logo na jižní fasádě hlavní haly (jako v renderu) – nad doky
+  const bigLogo=new THREE.Mesh(new THREE.PlaneGeometry(26,6.5),new THREE.MeshBasicMaterial({map:lt,transparent:true})); bigLogo.position.set(X(100),HF-3.6,Z(0)+.4); g_.add(bigLogo);
+  // svody a střešní prvky
+  for(const x of [48,72,96,120,144,166]) { const dp=new THREE.Mesh(new THREE.CylinderGeometry(.09,.09,HF-PL,8),new THREE.MeshStandardMaterial({color:0x2a2e32})); dp.position.set(X(x),(HF+PL)/2,Z(-.15)); g_.add(dp); }
+  for(const [x,y] of [[60,40],[100,22],[130,48],[150,14]]) box(x,x+3.5,y,y+2.2,HH+.35,HH+1.6,steel);          // VZT jednotky
+  for(const [x,y] of [[70,30],[110,38],[140,28]]) { const d=new THREE.Mesh(new THREE.SphereGeometry(1.1,12,8,0,Math.PI*2,0,Math.PI/2),new THREE.MeshStandardMaterial({color:0xdfe9f2,roughness:.3,transparent:true,opacity:.85})); d.position.set(X(x),HH+.35,Z(y)); g_.add(d); }
+  // nákladní vozidla u doků
+  const truck=(x,y,rot)=>{ const t=new THREE.Group(); const tr=new THREE.Mesh(new THREE.BoxGeometry(2.5,3.3,13.6),white); tr.position.set(0,2.2,7); const cab=new THREE.Mesh(new THREE.BoxGeometry(2.5,2.7,2.3),new THREE.MeshStandardMaterial({color:[0xc0392b,0x1d4f8c,0x2b3036][Math.floor(x)%3],roughness:.5})); cab.position.set(0,1.9,15.2); const ch=new THREE.Mesh(new THREE.BoxGeometry(2.3,.6,13),new THREE.MeshStandardMaterial({color:0x22262a})); ch.position.set(0,.7,7); t.add(tr,cab,ch); for(const zz of [1.5,3.6,5.1,11.5,14.8]) for(const sx of [-1.15,1.15]){ const w=new THREE.Mesh(new THREE.CylinderGeometry(.5,.5,.3,12),rubber); w.rotation.z=Math.PI/2; w.position.set(sx,.5,zz); t.add(w); } t.traverse(o=>{o.castShadow=true;}); t.position.set(X(x),0,Z(y)); t.rotation.y=rot; g_.add(t); };
+  truck(56,-1.4,0); truck(68,-1.4,0);
+  // osobní auta na parkovišti před administrativou
+  const carCols=[0x1f2933,0xb0b6bb,0x2d5aa8,0xc0392b,0x20262b,0xe8e8e8,0x3a4a3a];
+  for(let k=0;k<10;k+=1){ if(k%3===1) continue; const x=1.2+k*2.6; const cr=new THREE.Group(); const body=new THREE.Mesh(new THREE.BoxGeometry(1.8,.9,4.2),new THREE.MeshStandardMaterial({color:carCols[k%carCols.length],roughness:.4,metalness:.4})); body.position.y=.65; const top=new THREE.Mesh(new THREE.BoxGeometry(1.6,.7,2.3),glassM); top.position.set(0,1.3,-.1); cr.add(body,top); cr.traverse(o=>{o.castShadow=true;}); cr.position.set(X(x),0,Z(-16.5)); g_.add(cr); }
+  // vlajky BUSINESS PARK u vjezdu
+  const flagTex=(()=>{ const c=document.createElement('canvas'); c.width=128; c.height=320; const x=c.getContext('2d'); x.fillStyle='#1d5a37'; x.fillRect(0,0,128,320); x.fillStyle='#27754a'; x.fillRect(0,0,128,26); x.fillStyle='#fff'; x.font='800 40px Helvetica,Arial'; x.translate(78,160); x.rotate(-Math.PI/2); x.textAlign='center'; x.fillText('BUSINESS PARK',0,0); const t=new THREE.CanvasTexture(c); t.colorSpace=THREE.SRGBColorSpace; return t; })();
+  for(const x of [28,34,40]){ const pole=new THREE.Mesh(new THREE.CylinderGeometry(.07,.07,8,8),steel); pole.position.set(X(x),4,Z(-24)); g_.add(pole); const fl=new THREE.Mesh(new THREE.PlaneGeometry(1.4,3.4),new THREE.MeshBasicMaterial({map:flagTex,side:THREE.DoubleSide})); fl.position.set(X(x)+.75,6.2,Z(-24)); g_.add(fl); }
+  // zeleň: stromořadí podél jižní a východní hranice, travnaté pásy
+  const grass=new THREE.MeshStandardMaterial({color:0x6f9f55,roughness:1}); box(-21,L_+36,-31,-19,-.2,.05,grass); box(L_+22,L_+36,-31,W+12,-.2,.05,grass); box(L_+2,L_+22,W+2,W+12,-.2,.05,grass);
+  const trunkM=new THREE.MeshStandardMaterial({color:0x5a4631,roughness:1}); let sd2=11; const rr=()=>(sd2=(sd2*16807)%2147483647)/2147483647;
+  const tree=(x,y,sc)=>{ const t=new THREE.Group(); const tk=new THREE.Mesh(new THREE.CylinderGeometry(.18*sc,.25*sc,3*sc,6),trunkM); tk.position.y=1.5*sc; const cr=new THREE.Mesh(new THREE.IcosahedronGeometry(2.1*sc,1),new THREE.MeshStandardMaterial({color:new THREE.Color().setHSL(.25+rr()*.07,.45,.28+rr()*.08),roughness:1,flatShading:true})); cr.position.y=4.2*sc; t.add(tk,cr); t.traverse(o=>{o.castShadow=true;}); t.position.set(X(x),0,Z(y)); g_.add(t); };
+  for(let x=-10;x<=L_+10;x+=11) tree(x,-27,.9+rr()*.4);
+  for(let y=-18;y<=W+10;y+=10) tree(L_+29,y,.9+rr()*.4);
+  for(let x=L_+2;x<=L_+20;x+=9) tree(x,W+7,.8+rr()*.3);
+  // obrubníky a bílé kolejnice parkování (jemná kresba)
+  box(-21,0,-19.15,-19,.1,.3,new THREE.MeshStandardMaterial({color:0x8d9296})); box(0,90,-19.15,-19,.1,.3,new THREE.MeshStandardMaterial({color:0x8d9296}));
+  return g_;
+}
+function buildPlan(){
+  while(planGroup.children.length){ planGroup.remove(planGroup.children[0]); }
+  const e0=-298, e1=-130.4, n0=14, n1=74;
+  let sum=0,cnt=0; for(let e=e0;e<=e1;e+=6)for(let n=n0;n<=n1;n+=6){ const [X,Z]=enToLocal(e,n); sum+=ground(X,Z); cnt++; }
+  const level=PLAN_PAD.level; const g_=makeBudovaA(); const [X,Z]=enToLocal((e0+e1)/2,(n0+n1)/2);
+  g_.position.set(X,level-Z0,Z); g_.rotation.y=-GRID*Math.PI/180; planGroup.add(g_);
+  { let sd=19; const rr=()=>(sd=(sd*16807)%2147483647)/2147483647; const trunkM=new THREE.MeshStandardMaterial({color:0x5a4631,roughness:1});
+    const tree=(e,n,sc)=>{ const [tx,tz]=enToLocal(e,n); const gy=ground(tx,tz)-Z0; const t=new THREE.Group(); const tk=new THREE.Mesh(new THREE.CylinderGeometry(.18*sc,.25*sc,3*sc,6),trunkM); tk.position.y=1.5*sc; const cr=new THREE.Mesh(new THREE.IcosahedronGeometry(2.1*sc,1),new THREE.MeshStandardMaterial({color:new THREE.Color().setHSL(.25+rr()*.07,.45,.28+rr()*.08),roughness:1,flatShading:true})); cr.position.y=4.2*sc; t.add(tk,cr); t.traverse(o=>{o.castShadow=true;}); t.position.set(tx,gy,tz); planGroup.add(t); };
+    const q3=overlay.kopu.find(q=>q.n==='3840/3'), ring=q3?q3.r[0]:null;   // stromy jen uvnitř parcely vzniklé pozemkovými úpravami (3840/3)
+    const inside=(e,n)=>{ if(!ring) return false; const [x,y]=enToGis(e,n); return pip(x,y,ring); };
+    if(ring) for(let e=-316;e<=-128;e+=9){ let a=null,b=null; for(let n=60;n<=105;n+=.5) if(inside(e,n)){ if(a===null)a=n; b=n; } if(a===null||b-a<4) continue; const w=b-a, mid=(a+b)/2;
+      if(w>=14){ tree(e,mid-w/4,.9+rr()*.4); tree(e+4.5,mid+w/4,.8+rr()*.4); } else tree(e,mid,.9+rr()*.4); }
+  }
+  PINFO={X,Z,level,top:12};
+}
+
+// ---------- popisky ----------
+const labelGroup=new THREE.Group(); world.add(labelGroup);
+function sprite(text,sub,color='#fff',head=''){
+  const c=document.createElement('canvas'); const x=c.getContext('2d'); const f=34;
+  const lines=sub?(head?sub.split(' · '):[sub]):[];   // tag s označením z plánu: číslo parcely, výměra a vlastník každé na vlastním řádku
+  x.font=`600 ${f}px -apple-system,Helvetica,Arial`; const w=Math.max(x.measureText(text).width, ...lines.map(l=>x.measureText(l).width*.78))+36, hh=head?f*.8+10:0, lh=f*.78+6, h=f+24+hh+(lines.length?(head?lines.length*lh+8:f+2):0);
+  c.width=w; c.height=h; x.font=`600 ${f}px -apple-system,Helvetica,Arial`;
+  x.fillStyle='rgba(12,17,23,.78)'; x.beginPath(); x.roundRect(0,0,w,h,14); x.fill();
+  x.strokeStyle=color; x.lineWidth=3; x.stroke();
+  x.textBaseline='top'; if(head){ x.font=`700 ${f*.8}px -apple-system,Helvetica,Arial`; x.fillStyle=color; x.fillText(head,18,10); x.font=`600 ${f}px -apple-system,Helvetica,Arial`; }
+  x.fillStyle='#fff'; x.fillText(text,18,12+hh);
+  x.font=`400 ${f*.78}px -apple-system,Helvetica,Arial`; x.fillStyle='#c4cfda'; lines.forEach((l,i)=>x.fillText(l,18,f+18+hh+i*lh));
+  const t=new THREE.CanvasTexture(c); t.colorSpace=THREE.SRGBColorSpace;
+  const s=new THREE.Sprite(new THREE.SpriteMaterial({map:t,depthTest:false,transparent:true})); s.scale.set(w/ (f*.62), h/(f*.62),1); s.renderOrder=10; return s;
+}
+const PARCELTAG=/^(st\.\s?)?\d{3,4}(\/\d+)?(\s|$)|^Příjezd|komunikace|parcela/i;   // popisky parcel a komunikací (mizí při oddálení); pinové logo firem zůstávají
+const PLANID={'7461/14':'1','7461/7':'2','7461/6':'3','7461/5':'4','7461/4':'5','st.1419/18':'6','7461/3':'7','7461/1':'A','7461/2':'B','7461/17':'C','7461/13':'10','7461/10':'12','7461/18':'13A','7461/9':'13B','7461/19':'13B','7461/8':'14'};   // označení parcel z prodejního plánu bpst.cz/prodej-parcel-3 (přiřazeno podle výměr a pořadí SPV I–XII; C = 7461/17 + 29 + 30)
+let LBLGRP=null, LBLSMALL=false;   // LBLSMALL: popisek malé parcely (<500 m²) se zobrazí jen při přiblížení
+function addLabelAt(X,Z,text,sub,color,lift=18,baseY=null){
+  const gy=baseY===null?ground(X,Z)-Z0:baseY; const s=sprite(text,sub,color,PLANID[text.replace(/^st\. /,'st.')]?'Parcela '+PLANID[text.replace(/^st\. /,'st.')]:''); s.position.set(X,gy+lift,Z); s.userData.grp=LBLGRP; s.userData.small=LBLSMALL; s.userData.parcel=PARCELTAG.test(text)&&!/^Budova/.test(text); labelGroup.add(s);
+  const geoL=new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(X,gy,Z),new THREE.Vector3(X,gy+lift,Z)]);
+  const ln=new THREE.Line(geoL,new THREE.LineBasicMaterial({color:0xffffff,transparent:true,opacity:.6})); ln.userData.grp=LBLGRP; ln.userData.small=LBLSMALL; ln.userData.parcel=s.userData.parcel; labelGroup.add(ln); LBLSMALL=false;
+}
+function applyLabelGroups(){ labelGroup.children.forEach(o=>{ const g_=o.userData.grp; o.visible=o.userData.gv=!((g_==='kopu'&&!L.kopuLbl)||(g_==='exist'&&!L.bExist)||(g_==='amtech'&&!L.bAmtech)||(g_==='soldlbl'&&!L.sold)||(g_==='plan'&&!L.scenA)||(g_==='x1419'&&(L.scenA||!L.bExist))); }); }
+// skupiny budov v legendě (klikací); další klienti se přidají jako další položka
+const BGROUPS=[
+  {key:'bExist', name:'Stávající budovy', sub:'Budova C · SPV XI, Budova Jih', col:'#c7c2b3'},
+  {key:'bAmtech', name:'Klient: Amtech (návrh B)', sub:'A1–A4, hala B · 5 budov, '+'zast. plocha ≈ 11 960 m²', col:'#1491F9'}
+];
+function applyBuildings(){
+  [cGroup,jGroup].forEach(g_=>g_.visible=L.bExist); xGroup.visible=L.bExist&&!L.scenA; planGroup.visible=L.scenA;
+  designGroup.children.forEach(o=>{ if(!(o.userData&&o.userData.veg)) o.visible=L.bAmtech; });
+  applyLabelGroups(); applyVeg();
+  if(typeof paint==='function'&&g) paint();
+}
+const addLabel=(x,y,text,sub,color,lift=18)=>{ const [X,Z]=toLocal(x,y); addLabelAt(X,Z,text,sub,color,lift); };
+const centroid0=r=>{let a=0,cx=0,cy=0;for(let i=0;i<r.length;i++){const [x1,y1]=r[i],[x2,y2]=r[(i+1)%r.length];const f=x1*y2-x2*y1;a+=f;cx+=(x1+x2)*f;cy+=(y1+y2)*f;}a/=2;return[cx/(6*a),cy/(6*a)];};
+function distEdge(x,y,r){ let m=1e9; for(let i=0;i<r.length;i++){ const [ax,ay]=r[i],[bx,by]=r[(i+1)%r.length],dx=bx-ax,dy=by-ay,l2=dx*dx+dy*dy||1,t=Math.max(0,Math.min(1,((x-ax)*dx+(y-ay)*dy)/l2)); m=Math.min(m,Math.hypot(x-ax-t*dx,y-ay-t*dy)); } return m; }
+const centroid=r=>{   // těžiště; pokud leží mimo parcelu (tenké/zalomené tvary), nejvnitřnější bod parcely
+  const c=centroid0(r); if(pip(c[0],c[1],r)&&distEdge(c[0],c[1],r)>1.5) return c;
+  const xs=r.map(p=>p[0]), ys=r.map(p=>p[1]); let best=c, bd=-1; const x0=Math.min(...xs), x1=Math.max(...xs), y0=Math.min(...ys), y1=Math.max(...ys);
+  const st=Math.max(.5,Math.min(x1-x0,y1-y0)/40);
+  for(let x=x0;x<=x1;x+=st) for(let y=y0;y<=y1;y+=st){ if(!pip(x,y,r)) continue; const d=distEdge(x,y,r); if(d>bd){bd=d;best=[x,y];} }
+  return best; };
+function pinSprite(img,bg,border){
+  const c=document.createElement('canvas'); c.width=640; c.height=250; const x=c.getContext('2d');
+  x.fillStyle=bg; x.strokeStyle=border; x.lineWidth=10; x.beginPath(); x.roundRect(8,8,624,170,28); x.fill(); x.stroke();
+  x.fillStyle=bg; x.beginPath(); x.moveTo(280,176); x.lineTo(320,236); x.lineTo(360,176); x.closePath(); x.fill(); x.strokeStyle=border; x.beginPath(); x.moveTo(280,178); x.lineTo(320,236); x.lineTo(360,178); x.stroke();
+  const bw=540, bh=120, sc=Math.min(bw/img.width,bh/img.height), w=img.width*sc, h=img.height*sc; x.drawImage(img,(640-w)/2,8+(170-h)/2,w,h);
+  const t=new THREE.CanvasTexture(c); t.colorSpace=THREE.SRGBColorSpace; const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:t,depthTest:false,transparent:true})); sp.center.set(.5,0); sp.scale.set(640/34,250/34,1); sp.renderOrder=11; return sp;
+}
+const PIN_Y=40;   // všechny firemní štítky (piny) ve stejné absolutní výšce (m nad referenční rovinou modelu)
+function addPinAt(X,Z,img,bg,border,lift=34){
+  const gy=ground(X,Z)-Z0; lift=PIN_Y-gy; const sp=pinSprite(img,bg,border); sp.position.set(X,gy+lift,Z); sp.userData.grp=LBLGRP; labelGroup.add(sp);
+  { const ln=new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(X,gy,Z),new THREE.Vector3(X,gy+lift,Z)]),new THREE.LineBasicMaterial({color:0xffffff,transparent:true,opacity:.7})); ln.userData.grp=LBLGRP; labelGroup.add(ln); }
+}
+function textPin(text,sub,bg,border,fg='#fff'){
+  const c=document.createElement('canvas'); c.width=640; c.height=250; const x=c.getContext('2d');
+  x.fillStyle=bg; x.strokeStyle=border; x.lineWidth=10; x.beginPath(); x.roundRect(8,8,624,170,28); x.fill(); x.stroke();
+  x.beginPath(); x.moveTo(280,176); x.lineTo(320,236); x.lineTo(360,176); x.closePath(); x.fill(); x.beginPath(); x.moveTo(280,178); x.lineTo(320,236); x.lineTo(360,178); x.stroke();
+  x.fillStyle=fg; x.textAlign='center'; x.font='800 84px Helvetica,Arial,sans-serif'; x.fillText(text,320,102); x.font='500 40px Helvetica,Arial,sans-serif'; x.fillText(sub,320,152);
+  const t=new THREE.CanvasTexture(c); t.colorSpace=THREE.SRGBColorSpace; const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:t,depthTest:false,transparent:true})); sp.center.set(.5,0); sp.scale.set(640/34,250/34,1); sp.renderOrder=11; return sp;
+}
+function addTextPinAt(X,Z,text,sub,bg,border,lift,baseY){
+  const gy=baseY===undefined?ground(X,Z)-Z0:baseY; const sp=textPin(text,sub,bg,border); sp.position.set(X,gy+lift,Z); sp.userData.grp=LBLGRP; labelGroup.add(sp);
+  const ln=new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(X,gy,Z),new THREE.Vector3(X,gy+lift,Z)]),new THREE.LineBasicMaterial({color:0xffffff,transparent:true,opacity:.7})); ln.userData.grp=LBLGRP; labelGroup.add(ln);
+}
+function parcelCenter(keys){ let sx=0,sy=0,a=0; for(const q of overlay.parcels) if(keys.includes(q.k)){ const [x,y]=centroid(q.r[0]); sx+=x*q.a; sy+=y*q.a; a+=q.a; } return a?[sx/a,sy/a]:null; }
+const resvTag=k=>RESV.includes(k)?' · REZERVOVÁNO':'';
+function buildLabels(){
+  while(labelGroup.children.length){ const o=labelGroup.children.pop(); o.geometry&&o.geometry.dispose(); }
+  if(DESIGN){
+    LBLGRP='amtech';
+    for(const b of BLD){ const [X,Z]=enToLocal((b.e0+b.e1)/2,(b.n0+b.n1)/2); const area_=(b.e1-b.e0)*(b.n1-b.n0);
+      addLabelAt(X,Z,b.name.split(' · ')[0]+' · '+b.name.split(' · ')[1].split(',')[0].split(' (')[0],fmt(area_)+' m² · '+b.fl+' NP',b.col,(b.top||10)+7,b.level-Z0); }
+    LBLGRP='amtech'; const [X,Z]=enToLocal(54,50); addLabelAt(X,Z,'Náměstí','A-plaza · '+fmt((84-24)*(66-34))+' m²','#e2d6bc',12);
+  } else {
+    for(const p of overlay.parcels) if((p.c==='pozemek'||p.c==='hala')&&!(L.sale&&SALE.includes(p.k))){ const [x,y]=centroid(p.r[0]); LBLSMALL=p.a<500; addLabel(x,y,p.k,fmt(p.a)+' m²',CAT[p.c].line,16); }
+  }
+  LBLGRP='kopu';
+  for(const q of overlay.kopu) if(q.lv==='3840'){ const [x,y]=centroid(q.r[0]); addLabel(x,y,'Nová parcela '+q.n,fmt(q.a)+' m² · '+(q.n==='3840/3'?'za nároky 6010/3, 6011/167, 6018/530':q.n==='3840/1'?'vzniká na místě původní 6010/3':'vzniká na místě původní 6010/3'),'#27c274',q.n==='3840/3'?20:12); }
+  for(const q of overlay.kopuOld){ const [x,y]=centroid(q.r[0]); addLabel(x,y,'Původní parcela '+q.k,fmt(q.a)+' m² · nárok v pozemkových úpravách','#ff8c3c',10); }
+  LBLGRP=null;
+  { const q=overlay.parcels.find(x=>x.k==='6010/3'); if(q){ const [x,y]=centroid(q.r[0]); addLabel(x,y,'Příjezd 1','6010/3 · '+fmt(q.a)+' m² · RK Průmyslová s.r.o.','#ffa6f0',30); } }
+  LBLGRP='soldlbl'; for(const k of [...CERV,...NOBI]){ const q=overlay.parcels.find(x=>x.k===k); if(q&&q.a>=300){ const [x,y]=centroid(q.r[0]); addLabel(x,y,q.k,fmt(q.a)+' m²','#e53935',9); } }
+  LBLGRP='sold';
+  { const cc=parcelCenter(CERV); if(cc){ const [X,Z]=toLocal(...cc); addPinAt(X,Z,LOGO.cervinka,'#20262c','#e53935'); } const cn=parcelCenter(NOBI); if(cn){ const [X,Z]=toLocal(...cn); addPinAt(X,Z,LOGO.nobility,'#ffffff','#f7c600'); } }
+  LBLGRP=null;
+
+  for(const p of overlay.parcels) if(['6010/2','6010/4','7440'].includes(p.k)){ const [x,y]=centroid(p.r[0]); addLabel(x,y,p.k+(p.k==='6010/4'?' · točna':''),fmt(p.a)+' m² · '+(p.k==='6010/2'?'RK Průmyslová FB s.r.o.':'RK Průmyslová s.r.o.')+resvTag(p.k),RESV.includes(p.k)?'#fc6722':'#2f80ff',p.a<100?22:9); }
+  for(const p of overlay.parcels) if(p.c==='bp'&&p.a>=300&&p.k!=='7461/15'&&!CERV.includes(p.k)&&!NOBI.includes(p.k)&&!(L.sale&&SALE.includes(p.k))){ const [x,y]=centroid(p.r[0]); LBLSMALL=p.a<500; addLabel(x,y,p.k,fmt(p.a)+' m²'+(OWN3840.includes(p.k)?' · RK Průmyslová s.r.o.':'')+(isJih(p)?' · '+JIHN:'')+resvTag(p.k),RESV.includes(p.k)?'#fc6722':'#3cc8b8',9); }
+  if(L.sale) for(const p of overlay.parcels) if(SALE.includes(p.k)){ const [x,y]=centroid(p.r[0]); LBLSMALL=p.a<500; addLabel(x,y,p.k,fmt(p.a)+' m² · '+SALEOWN[p.k]+resvTag(p.k),RESV.includes(p.k)?'#fc6722':'#3ddc84',p.a<4000?9:14); }
+  { const p=overlay.parcels.find(q=>q.k==='6010/12'); if(p){ const [x,y]=centroid(p.r[0]); addLabel(x,y,'6010/12 · manipulační plocha',fmt(p.a)+' m² · '+JIHN,'#cfd8e2',9); } }
+  { const [sx,sy]=centroid(overlay.sold16); addLabel(sx+22,sy+20,'7461/16','2 736 m² · součást perimetru campusu'+(L.sale?' · RK Průmyslová s.r.o.':''),CAT.paterni.line,22); }
+  { const p=overlay.parcels.find(q=>q.k==='7461/16'); addLabel(-541085,-1179852,'Páteřní komunikace 7461/16','celá parcela · '+fmt(p.a)+' m²','#e6e6e6',16); }
+  { const p=overlay.parcels.find(q=>q.k==='7461/15'); if(p){ const [x,y]=centroid(p.r[0]); addLabel(x,y,'Páteřní komunikace 7461/15',fmt(p.a)+' m² · RK Průmyslová s.r.o.','#e6e6e6',10); } }
+  { const p=overlay.parcels.find(q=>q.k==='7268/5'); const [x,y]=centroid(p.r[0]); addLabel(x,y,'Příjezd 2','7268/1–8 · '+fmt(area.prijezd2)+' m²',CAT.prijezd2.line,16); }
+  addLabel(-540933.3,-1179990.4,'VVN 110 kV · V545/V546','stožár u vjezdu (výška orient.), vedení kříží Příjezd 2','#ff5a5a',50);
+  addLabel(-540750,-1179848,'D55','dálnice (v místě kontaktu s perimetrem)','#ffffff',26);
+  addLabel(-541081,-1180188,'Most / nadjezd','křížení s D55','#ffffff',24);
+  LBLGRP='exist';
+  LBLGRP='plan';
+  if(PINFO){ addLabelAt(PINFO.X,PINFO.Z,'Budova A · plánovaná','GLA 9 551 m² · volné k pronájmu 2 758 m² · rezervováno 7 327 m² · výstavba 2027','#8fa6c4',22,PINFO.level-Z0+PINFO.top); }
+  LBLGRP='exist';
+  if(CINFO){ const [X,Z]=enToLocal(CINFO.ec,CINFO.nc); addLabelAt(X,Z,'Budova C · SPV XI','existující','#d9c7a3',16,CINFO.level-Z0+8.5); }
+  LBLGRP='x1419';
+  if(XINFO){ const [X,Z]=enToLocal(XINFO.ec,XINFO.nc); addLabelAt(X,Z,'st. 1419/18','pozemek vč. budovy 4 306 m² · RK Průmyslová SPV VI s.r.o.','#d3d5d4',16,XINFO.level-Z0+9); }
+  LBLGRP='exist';
+  if(JINFO){ const [X,Z]=enToLocal(JINFO.ec,JINFO.nc); addPinAt(X,Z,LOGO.uhcar,'#ffffff','#e50004',44); }
+  LBLGRP=null;
+  addLabel(-540791,-1180097,'Sousední areál','jihovýchod za D55','#ffffff',24);
+  addLabel(-540655,-1180283,'Železnice','','#ffffff',20);
+}
+
+// ---------- vrstvy a režimy ----------
+function bind(id,key,fn){ $(id).addEventListener('change',e=>{L[key]=e.target.checked; (fn||paint)();}); }
+bind('lD55new','d55new'); bind('lOrto','orto'); bind('lBp','bp'); bind('lCad','cad'); bind('lCont','cont');
+bind('lSlope','slope',()=>{paint(); $('slopeLegend').style.display=L.slope?'block':'none';});
+bind('lPasD55','pasD55'); bind('lPasVVN','pasVVN'); bind('lKopu','kopu'); bind('lKopuLbl','kopuLbl',applyBuildings); bind('lVeg','veg',applyVeg); bind('lLabels','labels',()=>{labelGroup.visible=L.labels;});
+$('lShadow').addEventListener('change',e=>{renderer.shadowMap.enabled=e.target.checked; sun.castShadow=e.target.checked; terrain.material.needsUpdate=true;});
+function legend(){
+  const chip=(bg,extra='')=>`<span class="sw" style="background:${bg};${extra}"></span>`;
+  const cb=(f,col,t,sb,ex)=>`<label class="lrow"><input type="checkbox" data-f="${f}" ${L[f]?'checked':''}> ${col}<span><b>${t}</b>${sb?`<small>${sb}</small>`:''}</span></label>${ex||''}`;
+  const sub=(col,t)=>`<div class="lsub">${col} ${t}</div>`;
+  const hd=t=>`<div class="lhd">${t}</div>`;
+  const pmode=L.sold?'sold':L.sale?'sale':L.resv?'resv':L.own?'own':'none';
+  const pm=(m,col,t,sb)=>`<div class="pmode lrow" data-m="${m}" style="${pmode===m?'':'opacity:.55'}"><span style="width:16px;text-align:center">${pmode===m?'◉':'○'}</span> ${col}<span><b>${t}</b>${sb?`<small>${sb}</small>`:''}</span></div>`;
+  const rad=(v,on,col,t,sb)=>`<div class="scn lrow" data-v="${v}" style="${on?'':'opacity:.5'}"><span style="width:16px;text-align:center">${on?'◉':'○'}</span> ${col}<span><b>${t}</b><small>${sb}</small></span></div>`;
+  $('legend').innerHTML =
+    hd('Budovy')
+    + cb('bExist',chip('#c7c2b3'),'Stávající','Budova C · SPV XI, Budova Jih (UH CAR)')
+    + cb('bAmtech',chip('#3a3f46'),'Klient: Amtech (návrh B)','A1–A4, hala B · zast. ≈ 11 960 m²')
+    + hd('Stav parcel')
+    + cb('sale',chip('rgba(61,220,132,.5)','border:1px dashed #3ddc84'),'K prodeji','neprodané parcely · '+fmt(overlay.parcels.filter(q=>SALE.includes(q.k)).reduce((a,q)=>a+q.a,0))+' m²')
+    + cb('resv',chip('repeating-linear-gradient(45deg,#fc6722 0 2px,transparent 2px 5px)','border-color:#fc6722'),'Rezervováno','7461/1, 7461/2, 7461/29, 6010/2, 6010/4, 7440')
+    + cb('sold',chip('#e53935'),'Prodáno','Červinka Fire Group, Nobility')
+    + cb('own',chip('#2f80ff'),'Vlastnictví skupiny','vlastník je uveden v popisku parcely')
+    + hd('Perimetr Amtech')
+    + cb('perim',chip('#ffb020'),'Perimetr parcel','pozemky campusu a hala k demolici · v případě prodeje Amtechu též Příjezd 2 a část páteřní komunikace 7461/16')
+    + hd('Komunikace')
+    + cb('roads',chip('#f050e6'),'Příjezdy a páteřní komunikace','',sub(chip('#ffa6f0'),'Příjezd 1 · 6010/3')+sub(chip('#f050e6'),'Příjezd 2 · 7268/1–8')+sub(chip('rgba(230,230,230,.5)','border:1px dashed #ebebeb'),'páteřní komunikace · 7461/15 a 7461/16'));
+}
+$('legend').addEventListener('change',e=>{ const f=e.target.dataset&&e.target.dataset.f; if(!f)return; L[f]=e.target.checked; applyBuildings(); });
+$('legend').addEventListener('click',e=>{ const pmEl=e.target.closest('.pmode'); if(pmEl){ const m=pmEl.dataset.m; L.own=m==='own'; L.resv=m==='resv'; L.sale=m==='sale'; L.sold=m==='sold'; applyBuildings(); legend(); return; } const sc=e.target.closest('.scn'); if(sc){ L.scenA=sc.dataset.v==='1'; SCENA_PLAN=L.scenA; gradeTerrain(); setDesign(DESIGN); return; } const t=e.target.closest('.bgrp'); if(!t)return; const k=t.dataset.k; L[k]=!L[k]; applyBuildings(); legend(); });
+$('slopeLegend').innerHTML = [['rgb(60,170,90)','< 2 %'],['rgb(200,210,60)','2–5 %'],['rgb(245,160,40)','5–8 %'],['rgb(225,70,50)','8–15 %'],['rgb(120,20,60)','> 15 %']].map(([c,t])=>`<div><span class="sw" style="background:${c}"></span>${t}</div>`).join('');
+function setDesign(on){
+  DESIGN=on; HH=on?HD:HB;
+  $('mNow').classList.toggle('on',!on); $('mDes').classList.toggle('on',on);
+  applyHeights(); buildVeg(); buildPower(); buildC(); buildJih(); buildX(); buildPlan(); buildLabels(); buildContours(); buildSlope(); designGroup.visible=on; if(on)buildDesign();
+  paint(); legend(); updateStats(); applyBuildings(); applyVeg(); labelGroup.visible=L.labels;
+}
+$('mNow').onclick=()=>setDesign(false); $('mDes').onclick=()=>setDesign(true);
+
+// převýšení
+let EX=1; function setEx(v){ EX=v; world.scale.y=v; $('exV').textContent=v+'×'; }
+$('exag').addEventListener('input',e=>setEx(+e.target.value));
+// slunce
+function setHour(h){
+  $('hV').textContent=`${Math.floor(h)}:${String(Math.round((h%1)*60)).padStart(2,'0')}`;
+  const t=(h-6)/13, az=(90+t*180)*Math.PI/180, el=(6+44*Math.sin(Math.PI*t))*Math.PI/180;
+  sun.position.set(Math.sin(az)*Math.cos(el),Math.sin(el),-Math.cos(az)*Math.cos(el)).multiplyScalar(1200);
+  sun.target.position.set(0,0,0); sun.intensity=Math.max(.15,2.4*Math.sin(el+.1));
+}
+$('hour').addEventListener('input',e=>setHour(+e.target.value)); setHour(14);
+
+// ---------- kamery ----------
+const orbit=new OrbitControls(camera,canvas); orbit.enableDamping=true; orbit.maxPolarAngle=Math.PI*0.495; orbit.minDistance=4; orbit.maxDistance=1600;
+const pl=new PointerLockControls(camera,canvas);
+let mode='orbit', fly=false; const keys={};
+function setMode(m){
+  mode=m; $('bOrbit').classList.toggle('on',m==='orbit'); $('bPov').classList.toggle('on',m==='pov');
+  orbit.enabled=(m==='orbit');
+  if(m==='pov'){ const [X,Z]=[camera.position.x,camera.position.z]; const gy=(ground(X,Z)-Z0)*EX+1.7; if(camera.position.y<gy||!fly) camera.position.y=gy; }
+  else { const d=new THREE.Vector3(); camera.getWorldDirection(d); orbit.target.copy(camera.position).addScaledVector(d,Math.max(40,camera.position.y*1.5)); orbit.update(); }
+}
+$('bOrbit').onclick=()=>{ if(pl.isLocked)pl.unlock(); setMode('orbit'); };
+$('bPov').onclick=()=>{ setMode('pov'); pl.lock(); };
+let lockFail=false;
+document.addEventListener('pointerlockerror',()=>{ lockFail=true; });
+canvas.addEventListener('click',()=>{ if(mode==='pov'&&!pl.isLocked&&!lockFail) pl.lock(); });
+{   // náhradní ovládání (vložená okna, dotyk): v POV tažením se rozhlížíš
+  const eu=new THREE.Euler(0,0,0,'YXZ'); let drag=null;
+  canvas.addEventListener('pointerdown',e=>{ if(mode==='pov'&&!pl.isLocked){ drag=[e.clientX,e.clientY]; canvas.setPointerCapture(e.pointerId); } });
+  canvas.addEventListener('pointerup',()=>{ drag=null; });
+  canvas.addEventListener('pointermove',e=>{
+    if(!drag||mode!=='pov'||pl.isLocked)return;
+    const dx=e.clientX-drag[0], dy=e.clientY-drag[1]; drag=[e.clientX,e.clientY];
+    eu.setFromQuaternion(camera.quaternion,'YXZ'); eu.y-=dx*.004; eu.x=Math.max(-1.45,Math.min(1.45,eu.x-dy*.004)); eu.z=0; camera.quaternion.setFromEuler(eu);
+  });
+}
+addEventListener('keydown',e=>{ keys[e.code]=true; if(e.code==='KeyF'&&mode==='pov') fly=!fly; });
+addEventListener('keyup',e=>{ keys[e.code]=false; });
+
+const PRESETS=[   // [e, n, výška nad terénem] v souřadnicích campusu (skutečný východ/sever); pohledy z rohů areálu směrem do středu
+  {n:'Z jihozápadního rohu',   pos:[-560,-300,150], tgt:[-200,-40], mode:'orbit'},
+  {n:'Z jihovýchodního rohu',  pos:[260,-300,150],  tgt:[-200,-40], mode:'orbit'},
+  {n:'Ze severovýchodního rohu', pos:[260,230,150], tgt:[-200,-40], mode:'orbit'},
+  {n:'Ze severozápadního rohu', pos:[-560,230,150], tgt:[-200,-40], mode:'orbit'},
+  {n:'Půdorys shora (střed areálu)', pos:[-205,-95,680], tgt:[-205,-94], mode:'orbit'}
+];
+$('presets').innerHTML=PRESETS.map((p,i)=>`<button data-i="${i}">${p.n}</button>`).join('');
+$('presets').addEventListener('click',e=>{ const b=e.target.closest('button'); if(!b)return; go(PRESETS[+b.dataset.i]); });
+function go(p){
+  const [X,Z]=enToLocal(p.pos[0],p.pos[1]); camera.position.set(X,(ground(X,Z)-Z0+p.pos[2])*EX,Z);
+  const [tX,tZ]=enToLocal(p.tgt[0],p.tgt[1]); const tg=new THREE.Vector3(tX,(ground(tX,tZ)-Z0+(p.mode==='pov'?(p.look??p.pos[2]):0))*EX,tZ);
+  if(pl.isLocked)pl.unlock();
+  if(p.mode==='pov'){ orbit.enabled=false; camera.lookAt(tg); fly=false; setMode('pov'); canvas.focus(); }
+  else { setMode('orbit'); orbit.target.copy(tg); orbit.update(); }
+}
+
+// ===================== LET: Cirrus SR22 – POV z kokpitu (zjednodušený model letu) =====================
+const FL={pos:new THREE.Vector3(),psi:0,theta:0,phi:0,v:58,thr:.6,assist:true,headY:0,headP:0,vsi:0,crash:0,msg:'',msgT:0,t0:0,init:false};
+const KT=1.94384, FT=3.28084;
+function flyReset(){
+  const [sx,sz]=enToLocal(-470,-260), [tx,tz]=enToLocal(-210,-60);
+  FL.pos.set(sx,(ground(sx,sz)-Z0)+115,sz); FL.psi=Math.atan2(tx-sx,-(tz-sz)); FL.theta=-.05; FL.phi=0; FL.v=55; FL.thr=.6; FL.crash=0; FL.headY=FL.headP=0; FL.t0=performance.now();
+}
+function startFly(){
+  if(pl.isLocked) pl.unlock();
+  mode='fly'; orbit.enabled=false; $('bOrbit').classList.remove('on'); $('bPov').classList.remove('on'); $('bFly').classList.add('on');
+  if(!FL.init){ flyReset(); FL.init=true; } else FL.t0=performance.now();
+  camera.rotation.order='YXZ'; camera.fov=72; camera.clearViewOffset(); camera.updateProjectionMatrix();
+  $('side').style.display='none'; $('help').style.display='none'; $('hud').style.display='none'; $('north').style.display='none'; $('cockpit').style.display='block'; resizeCockpit();
+}
+function stopFly(){
+  $('cockpit').style.display='none'; $('side').style.display=''; $('help').style.display=''; $('hud').style.display=''; $('north').style.display=''; $('bFly').classList.remove('on');
+  camera.rotation.order='XYZ'; camera.fov=55; camera.up.set(0,1,0);
+  const d=new THREE.Vector3(); camera.getWorldDirection(d); camera.position.y=Math.max(camera.position.y,60);
+  setMode('orbit'); orbit.target.copy(camera.position).addScaledVector(d,Math.max(120,camera.position.y*1.6)); orbit.target.y=0; orbit.update(); resize(); camera.updateProjectionMatrix();
+}
+$('bScenA').onclick=()=>{ L.scenA=!L.scenA; SCENA_PLAN=L.scenA; $('bScenA').classList.toggle('on',L.scenA); gradeTerrain(); setDesign(DESIGN); };
+$('bFly').onclick=()=>{ if(mode==='fly') stopFly(); else startFly(); };
+addEventListener('keydown',e=>{ if(mode!=='fly') return; if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Space'].includes(e.code)) e.preventDefault();
+  if(e.code==='Escape') stopFly(); if(e.code==='KeyH') { FL.assist=!FL.assist; flyMsg(FL.assist?'Autostabilizace ZAP':'Autostabilizace VYP'); } if(e.code==='KeyR') flyReset(); if(e.code==='KeyC'&&COCK) COCK.panelMode=COCK.panelMode?0:1; });
+{ let drag=null; canvas.addEventListener('pointerdown',e=>{ if(mode==='fly') drag=[e.clientX,e.clientY]; }); addEventListener('pointerup',()=>{ drag=null; });
+  addEventListener('pointermove',e=>{ if(mode!=='fly'||!drag) return; FL.headY=Math.max(-1.9,Math.min(1.9,FL.headY-(e.clientX-drag[0])*.004)); FL.headP=Math.max(-.7,Math.min(.9,FL.headP-(e.clientY-drag[1])*.004)); drag=[e.clientX,e.clientY]; }); }
+function flyMsg(t){ FL.msg=t; FL.msgT=performance.now(); }
+function flyUpdate(dt){
+  const k=keys;
+  if(FL.crash>0){ FL.crash-=dt; if(FL.crash<=0) flyReset(); }
+  else {
+    const pitchIn=(k.ArrowDown?1:0)-(k.ArrowUp?1:0), rollIn=(k.ArrowRight?1:0)-(k.ArrowLeft?1:0), rud=(k.KeyD?1:0)-(k.KeyA?1:0), thrIn=(k.KeyW?1:0)-(k.KeyS?1:0);
+    FL.thr=Math.max(0,Math.min(1,FL.thr+thrIn*.35*dt));
+    FL.phi+=rollIn*1.1*dt; if(!rollIn&&FL.assist) FL.phi+=(0-FL.phi)*Math.min(1,dt*.9); FL.phi=Math.max(-1.45,Math.min(1.45,FL.phi)); if(FL.assist) FL.phi=Math.max(-1.05,Math.min(1.05,FL.phi));
+    FL.theta+=pitchIn*.55*dt; if(!pitchIn&&FL.assist){ const trim=(FL.v-60)*.006; FL.theta+=(trim-FL.theta)*Math.min(1,dt*.8); } FL.theta=Math.max(-.65,Math.min(.6,FL.theta));
+    FL.psi+=(9.81*Math.tan(FL.phi)/Math.max(FL.v,25)+rud*.12)*dt;
+    const target=30+FL.thr*70; FL.v+=((target-FL.v)*.22-9.81*Math.sin(FL.theta)*.9)*dt; FL.v=Math.max(18,Math.min(115,FL.v));
+    if(FL.v<31){ FL.theta-=(31-FL.v)*.03*dt*3; if(performance.now()-FL.msgT>1200) flyMsg('STALL – přitlač řízení / přidej plyn'); }
+    const cp=Math.cos(FL.theta); FL.pos.x+=Math.sin(FL.psi)*cp*FL.v*dt; FL.pos.z+=-Math.cos(FL.psi)*cp*FL.v*dt; FL.pos.y+=Math.sin(FL.theta)*FL.v*dt; FL.vsi=Math.sin(FL.theta)*FL.v;
+    // hranice modelu: pozvolný návrat
+    const hx=-OX+160, hz=-OZ+160;
+    if(Math.abs(FL.pos.x)>hx||Math.abs(FL.pos.z)>hz){ const want=Math.atan2(-FL.pos.x,FL.pos.z); let dpsi=((want-FL.psi+Math.PI*3)%(Math.PI*2))-Math.PI; FL.psi+=Math.max(-1,Math.min(1,dpsi))*.9*dt; flyMsg('Opouštíte oblast modelu – návrat do areálu'); }
+    FL.pos.y=Math.min(FL.pos.y,700);
+    const gy=ground(FL.pos.x,FL.pos.z)-Z0;
+    if(FL.pos.y<gy+2.5){ FL.crash=1.8; flyMsg('Kontakt s terénem – restart letu'); }
+    else if(FL.pos.y<gy+35&&FL.vsi<-3&&performance.now()-FL.msgT>900) flyMsg('PULL UP');
+  }
+  // kamera = oči pilota (levá sedačka)
+  camera.position.set(FL.pos.x,FL.pos.y,FL.pos.z);
+  if(FL.crash>0){ camera.rotation.set(-.4,-FL.psi,0); }
+  else { camera.rotation.y=-(FL.psi+FL.headY); camera.rotation.x=FL.theta+FL.headP; camera.rotation.z=-FL.phi; }
+  if(!(keys.Mouse)){ FL.headY*=1-Math.min(1,dt*.6); FL.headP*=1-Math.min(1,dt*.6); }
+}
+let COCK=null, mapCv=null;
+function resizeCockpit(){ const c=$('cockpit'), dpr=Math.min(2,devicePixelRatio||1); c.width=innerWidth*dpr; c.height=innerHeight*dpr; COCK={c,x:c.getContext('2d'),W:innerWidth,H:innerHeight,dpr,panelMode:(COCK&&COCK.panelMode)||0}; }
+function buildMap(){
+  const W=300,H=Math.round(300*(-OZ*2)/(-OX*2)); mapCv=document.createElement('canvas'); mapCv.width=W; mapCv.height=H; const x=mapCv.getContext('2d'); x.fillStyle='#0d1a14'; x.fillRect(0,0,W,H);
+  const mp=(X,Z)=>[(X-OX)/(-2*OX)*W,(Z-OZ)/(-2*OZ)*H];
+  const col={pozemek:'#ffb020',hala:'#6fa0ff',paterni:'#9b6cff',prijezd2:'#f050e6',bp:'#3cc8b8'};
+  for(const q of overlay.parcels){ const c=col[q.c]; if(!c) continue; x.strokeStyle=c; x.lineWidth=1; for(const r of q.r){ x.beginPath(); r.forEach(([gx,gy],i)=>{ const [X,Z]=toLocal(gx,gy), [a,b]=mp(X,Z); i?x.lineTo(a,b):x.moveTo(a,b); }); x.closePath(); x.stroke(); } }
+  x.strokeStyle='#8fa8c4'; x.lineWidth=2; for(const pts of overlay.d55){ x.beginPath(); pts.forEach(([gx,gy],i)=>{ const [X,Z]=toLocal(gx,gy), [a,b]=mp(X,Z); i?x.lineTo(a,b):x.moveTo(a,b); }); x.stroke(); }
+  mapCv.mp=mp;
+}
+function drawCockpit(){
+  if(!COCK) resizeCockpit(); const {x,W,H,dpr}=COCK; x.setTransform(dpr,0,0,dpr,0,0); x.clearRect(0,0,W,H);
+  if(!mapCv) buildMap();
+  const now=performance.now(), k=keys;
+  const kt=FL.v*KT, alt=(FL.pos.y+Z0)*FT, agl=(FL.pos.y-(ground(FL.pos.x,FL.pos.z)-Z0))*FT, hdg=((FL.psi*180/Math.PI-GRID)%360+360)%360, fpm=FL.vsi*196.85;
+  const [wx,wz]=enToLocal(-205,-95), dX=wx-FL.pos.x, dZ=wz-FL.pos.z, distM=Math.hypot(dX,dZ), brg=((Math.atan2(dX,-dZ)*180/Math.PI-GRID)%360+360)%360;
+  // ---- rámy kabiny ----
+  const gl=x.createLinearGradient(0,0,0,H*.1); gl.addColorStop(0,'#0c0d0f'); gl.addColorStop(1,'#1d2024'); x.fillStyle=gl; x.fillRect(0,0,W,H*.075);
+  x.fillStyle='#0f1113'; x.beginPath(); x.moveTo(0,0); x.lineTo(W*.10,0); x.lineTo(W*.035,H*.62); x.lineTo(0,H*.66); x.fill(); x.beginPath(); x.moveTo(W,0); x.lineTo(W*.90,0); x.lineTo(W*.965,H*.62); x.lineTo(W,H*.66); x.fill();
+  x.fillRect(W*.5-7,0,14,H*.14);
+  if(COCK.panelMode===1){ // jen čelní sklo + malý údaj
+    x.fillStyle='rgba(8,10,12,.65)'; x.fillRect(W*.5-190,H-34,380,26); x.fillStyle='#fff'; x.font='13px Helvetica,Arial'; x.textAlign='center';
+    x.fillText(`${Math.round(kt)} kt   ${Math.round(alt/10)*10} ft   HDG ${String(Math.round(hdg)).padStart(3,'0')}°   VS ${Math.round(fpm/10)*10}`,W/2,H-16);
+  } else {
+    // ---- palubní deska ----
+    const top=H*.585; const pg=x.createLinearGradient(0,top,0,H); pg.addColorStop(0,'#2a2d32'); pg.addColorStop(.25,'#16181b'); pg.addColorStop(1,'#08090a');
+    x.fillStyle=pg; x.beginPath(); x.moveTo(0,H); x.lineTo(0,H*.70); x.quadraticCurveTo(W*.5,top-H*.045,W,H*.70); x.lineTo(W,H); x.fill();
+    x.strokeStyle='rgba(255,255,255,.22)'; x.lineWidth=2; x.beginPath(); x.moveTo(0,H*.70); x.quadraticCurveTo(W*.5,top-H*.045,W,H*.70); x.stroke();
+    x.fillStyle='rgba(0,0,0,.45)'; x.beginPath(); x.moveTo(0,H*.70); x.quadraticCurveTo(W*.5,top-H*.045,W,H*.70); x.lineTo(W,H*.725); x.quadraticCurveTo(W*.5,top-H*.02,0,H*.725); x.fill();   // stínítko
+    const sy=H*.655, sh=H*.275, sw=W*.355, px=W*.078, mx=W*.567;
+    const bez=(bx)=>{ x.fillStyle='#0b0c0e'; x.strokeStyle='#3b4047'; x.lineWidth=2; x.beginPath(); x.roundRect(bx-9,sy-9,sw+18,sh+18+H*.04,12); x.fill(); x.stroke(); };
+    bez(px); bez(mx);
+    const soft=(bx,names)=>{ const n=names.length, w=sw/n; names.forEach((t,i)=>{ x.fillStyle='#16191d'; x.strokeStyle='#454b53'; x.lineWidth=1; x.beginPath(); x.roundRect(bx+i*w+2,sy+sh+8,w-4,H*.026,4); x.fill(); x.stroke(); x.fillStyle='#9aa7b4'; x.font=`${Math.max(8,H*.014)}px Helvetica,Arial`; x.textAlign='center'; x.fillText(t,bx+i*w+w/2,sy+sh+8+H*.018); }); };
+    soft(px,['','','','','PFD','','','','','','','']); soft(mx,['ENGINE','MAP','TRAFFIC','','','','','','','','','']);
+    // ================= PFD (Garmin Perspective, zjednodušeně) =================
+    x.save(); x.beginPath(); x.roundRect(px,sy,sw,sh,6); x.clip();
+    const cx=px+sw/2, cy=sy+sh*.46, ppr=sh*1.15;
+    x.save(); x.translate(cx,cy); x.rotate(-FL.phi); x.translate(0,FL.theta*ppr);
+    let g1=x.createLinearGradient(0,-sh*2,0,0); g1.addColorStop(0,'#1c4f94'); g1.addColorStop(1,'#78b4ea'); x.fillStyle=g1; x.fillRect(-sw*2,-sh*3,sw*4,sh*3);
+    let g2=x.createLinearGradient(0,0,0,sh*2); g2.addColorStop(0,'#8a6a40'); g2.addColorStop(1,'#33230f'); x.fillStyle=g2; x.fillRect(-sw*2,0,sw*4,sh*3);
+    x.strokeStyle='#fff'; x.lineWidth=2; x.beginPath(); x.moveTo(-sw*2,0); x.lineTo(sw*2,0); x.stroke();
+    x.fillStyle='#fff'; x.font=`${Math.max(9,sh*.045)}px Helvetica,Arial`; x.textAlign='center';
+    for(let a=-30;a<=30;a+=2.5){ if(!a) continue; const yy=-a*Math.PI/180*ppr, big=Math.abs(a)%10===0, mid=Math.abs(a)%5===0; const w=big?sh*.20:mid?sh*.11:sh*.055; x.lineWidth=big?2:1.4; x.beginPath(); x.moveTo(-w,yy); x.lineTo(w,yy); x.stroke(); if(big){ x.fillText(String(Math.abs(a)),-w-sh*.045,yy+4); x.fillText(String(Math.abs(a)),w+sh*.045,yy+4); } }
+    x.restore();
+    // stupnice náklonu
+    x.save(); x.translate(cx,cy); x.rotate(-FL.phi); x.strokeStyle='#fff'; x.fillStyle='#fff'; x.lineWidth=2; const R=sh*.40;
+    for(const a of [-60,-45,-30,-20,-10,0,10,20,30,45,60]){ const r=a*Math.PI/180, L1=(Math.abs(a)%30===0)?sh*.045:sh*.03; x.beginPath(); x.moveTo(Math.sin(r)*R,-Math.cos(r)*R); x.lineTo(Math.sin(r)*(R-L1),-Math.cos(r)*(R-L1)); x.stroke(); }
+    x.restore(); x.fillStyle='#ffd400'; x.beginPath(); x.moveTo(cx,cy-sh*.40+2); x.lineTo(cx-7,cy-sh*.40+16); x.lineTo(cx+7,cy-sh*.40+16); x.fill();
+    // symbol letadla
+    x.strokeStyle='#ffd400'; x.lineWidth=4; x.beginPath(); x.moveTo(cx-sh*.30,cy); x.lineTo(cx-sh*.10,cy); x.lineTo(cx,cy+sh*.05); x.lineTo(cx+sh*.10,cy); x.lineTo(cx+sh*.30,cy); x.stroke();
+    // rychloměr
+    const tx=px, tw=sw*.15, t0=sy+sh*.08, t1=sy+sh*.70, tm=(t0+t1)/2, pk=(t1-t0)/70;
+    x.fillStyle='rgba(8,10,12,.78)'; x.fillRect(tx,t0,tw,t1-t0);
+    x.save(); x.beginPath(); x.rect(tx,t0,tw,t1-t0); x.clip(); x.fillStyle='#fff'; x.strokeStyle='#fff'; x.font=`${Math.max(9,sh*.05)}px Helvetica,Arial`; x.textAlign='right';
+    for(let v=Math.floor((kt-36)/10)*10; v<=kt+36; v+=10){ const yy=tm-(v-kt)*pk; if(v<20) continue; x.lineWidth=1.5; x.beginPath(); x.moveTo(tx+tw,yy); x.lineTo(tx+tw-8,yy); x.stroke(); if(v%20===0) x.fillText(String(v),tx+tw-12,yy+4); }
+    const band=(a,b,c)=>{ const y1=tm-(a-kt)*pk, y2=tm-(b-kt)*pk; x.fillStyle=c; x.fillRect(tx+tw-4,Math.min(y1,y2),4,Math.abs(y1-y2)); }; band(64,165,'#37c36a'); band(56,64,'#fff'); band(165,200,'#ffd400'); band(200,260,'#e53935');
+    x.restore(); x.fillStyle='#000'; x.strokeStyle='#fff'; x.lineWidth=1.5; x.fillRect(tx+2,tm-sh*.045,tw-4,sh*.09); x.strokeRect(tx+2,tm-sh*.045,tw-4,sh*.09); x.fillStyle='#fff'; x.font=`bold ${sh*.07}px Helvetica,Arial`; x.textAlign='center'; x.fillText(String(Math.round(kt)),tx+tw/2,tm+sh*.025);
+    // výškoměr
+    const ax=px+sw-tw, apk=(t1-t0)/500; x.fillStyle='rgba(8,10,12,.78)'; x.fillRect(ax,t0,tw,t1-t0);
+    x.save(); x.beginPath(); x.rect(ax,t0,tw,t1-t0); x.clip(); x.fillStyle='#fff'; x.strokeStyle='#fff'; x.font=`${Math.max(9,sh*.05)}px Helvetica,Arial`; x.textAlign='left';
+    for(let v=Math.floor((alt-260)/20)*20; v<=alt+260; v+=20){ const yy=tm-(v-alt)*apk; x.lineWidth=1.5; x.beginPath(); x.moveTo(ax,yy); x.lineTo(ax+(v%100===0?9:5),yy); x.stroke(); if(v%100===0) x.fillText(String(v),ax+12,yy+4); }
+    x.restore(); x.fillStyle='#000'; x.strokeStyle='#fff'; x.fillRect(ax+2,tm-sh*.045,tw-2,sh*.09); x.strokeRect(ax+2,tm-sh*.045,tw-2,sh*.09); x.fillStyle='#fff'; x.font=`bold ${sh*.07}px Helvetica,Arial`; x.textAlign='center'; x.fillText(String(Math.round(alt/10)*10),ax+tw/2+1,tm+sh*.025);
+    x.font=`${sh*.045}px Helvetica,Arial`; x.fillStyle='#4ee0e0'; x.fillText('29.92 IN',ax+tw/2,t1+sh*.05); x.fillStyle='#fff'; x.fillText('AGL '+Math.round(agl),ax+tw/2,t0-sh*.015);
+    x.fillStyle='#37c36a'; x.fillText((fpm>=0?'+':'')+Math.round(fpm/10)*10+' fpm',ax-sw*.07,t1+sh*.05);
+    // HSI
+    const hx=cx, hy=sy+sh*.86, hr=sh*.18; x.save(); x.beginPath(); x.rect(px,sy+sh*.66,sw,sh*.34); x.clip();
+    x.fillStyle='rgba(8,10,12,.82)'; x.beginPath(); x.arc(hx,hy,hr,0,Math.PI*2); x.fill(); x.strokeStyle='#cfd8e2'; x.lineWidth=1.5; x.stroke();
+    x.save(); x.translate(hx,hy); x.rotate(-hdg*Math.PI/180); x.fillStyle='#fff'; x.strokeStyle='#fff'; x.font=`${hr*.24}px Helvetica,Arial`; x.textAlign='center';
+    for(let a=0;a<360;a+=5){ const r=a*Math.PI/180, L1=a%10===0?hr*.12:hr*.07; x.lineWidth=a%10===0?1.5:1; x.beginPath(); x.moveTo(Math.sin(r)*hr,-Math.cos(r)*hr); x.lineTo(Math.sin(r)*(hr-L1),-Math.cos(r)*(hr-L1)); x.stroke(); }
+    for(let a=0;a<360;a+=30){ const r=a*Math.PI/180, lab=a===0?'N':a===90?'E':a===180?'S':a===270?'W':String(a/10); x.save(); x.translate(Math.sin(r)*hr*.68,-Math.cos(r)*hr*.68); x.rotate(r); x.fillText(lab,0,hr*.08); x.restore(); }
+    // směr k BPST (azimut)
+    x.rotate(brg*Math.PI/180); x.strokeStyle='#e040fb'; x.lineWidth=2.5; x.beginPath(); x.moveTo(0,-hr*.9); x.lineTo(0,-hr*.25); x.stroke(); x.fillStyle='#e040fb'; x.beginPath(); x.moveTo(0,-hr*.9); x.lineTo(-5,-hr*.76); x.lineTo(5,-hr*.76); x.fill();
+    x.restore(); x.fillStyle='#fff'; x.beginPath(); x.moveTo(hx,hy-hr-3); x.lineTo(hx-6,hy-hr-13); x.lineTo(hx+6,hy-hr-13); x.fill(); x.beginPath(); x.moveTo(hx,hy-hr*.35); x.lineTo(hx+hr*.18,hy+hr*.22); x.lineTo(hx,hy+hr*.1); x.lineTo(hx-hr*.18,hy+hr*.22); x.fill();
+    x.restore();
+    x.fillStyle='#000'; x.strokeStyle='#fff'; x.fillRect(hx-sh*.09,sy+sh*.655,sh*.18,sh*.07); x.strokeRect(hx-sh*.09,sy+sh*.655,sh*.18,sh*.07); x.fillStyle='#fff'; x.font=`bold ${sh*.055}px Helvetica,Arial`; x.textAlign='center'; x.fillText(String(Math.round(hdg)%360).padStart(3,'0')+'°',hx,sy+sh*.705);
+    x.fillStyle='rgba(8,10,12,.8)'; x.fillRect(px,sy,sw,sh*.065); x.fillStyle='#e8eef5'; x.font=`${sh*.042}px Helvetica,Arial`; x.textAlign='left'; x.fillText(`GS ${Math.round(kt)}KT   TRK ${String(Math.round(hdg)).padStart(3,'0')}°   PWR ${Math.round(FL.thr*100)}%`,px+8,sy+sh*.046); x.textAlign='right'; x.fillStyle='#e040fb'; x.fillText(`BPST  ${(distM/1852).toFixed(1)} NM  ${String(Math.round(brg)).padStart(3,'0')}°`,px+sw-8,sy+sh*.046);
+    if(performance.now()-FL.msgT<2200&&FL.msg){ x.textAlign='center'; x.font=`bold ${sh*.07}px Helvetica,Arial`; x.fillStyle=/PULL|STALL|Kontakt/.test(FL.msg)?'#ff5a4d':'#ffd400'; x.fillText(FL.msg,cx,sy+sh*.27); }
+    x.restore();
+    // ================= MFD =================
+    x.save(); x.beginPath(); x.roundRect(mx,sy,sw,sh,6); x.clip(); x.fillStyle='#070b0e'; x.fillRect(mx,sy,sw,sh);
+    const ew=sw*.30; x.fillStyle='#0c1216'; x.fillRect(mx,sy,ew,sh); x.strokeStyle='#26323a'; x.beginPath(); x.moveTo(mx+ew,sy); x.lineTo(mx+ew,sy+sh); x.stroke();
+    const rpm=1800+FL.thr*900, map=14+FL.thr*14.5, ff=6+FL.thr*11, fl=[38-((now-FL.t0)/60000)*.6,40-((now-FL.t0)/60000)*.5];
+    const bar=(lab,val,min,max,unit,col,yy)=>{ x.fillStyle='#9fb4c8'; x.font=`${sh*.04}px Helvetica,Arial`; x.textAlign='left'; x.fillText(lab,mx+8,yy); x.fillStyle='#fff'; x.textAlign='right'; x.fillText(val.toFixed(unit==='RPM'?0:1),mx+ew-8,yy); x.fillStyle='#1b262d'; x.fillRect(mx+8,yy+4,ew-16,sh*.03); x.fillStyle=col; x.fillRect(mx+8,yy+4,(ew-16)*Math.max(0,Math.min(1,(val-min)/(max-min))),sh*.03); };
+    x.fillStyle='#4ee0e0'; x.font=`bold ${sh*.045}px Helvetica,Arial`; x.textAlign='left'; x.fillText('ENGINE  IO-550',mx+8,sy+sh*.07);
+    bar('RPM',rpm,1500,2700,'RPM','#37c36a',sy+sh*.15); bar('MAP inHg',map,10,30,'MAP','#37c36a',sy+sh*.27); bar('FF GPH',ff,0,20,'FF','#37c36a',sy+sh*.39); bar('OIL PSI',58+FL.thr*14,30,100,'OIL','#37c36a',sy+sh*.51);
+    bar('CHT °F',330+FL.thr*40,200,460,'CHT','#ffd400',sy+sh*.63); bar('FUEL L gal',fl[0],0,45,'FL','#37c36a',sy+sh*.75); bar('FUEL R gal',fl[1],0,45,'FR','#37c36a',sy+sh*.87);
+    const mw=sw-ew, mcx=mx+ew+mw/2, mcy=sy+sh*.54, scale=mw/1900;     // px na metr
+    x.save(); x.beginPath(); x.rect(mx+ew+1,sy,mw-1,sh); x.clip(); x.fillStyle='#0a1a14'; x.fillRect(mx+ew,sy,mw,sh);
+    x.translate(mcx,mcy); x.rotate(-FL.psi); const pw=mapCv.width, ph=mapCv.height, mwid=-2*OX, mht=-2*OZ; const [mpx,mpy]=mapCv.mp(FL.pos.x,FL.pos.z);
+    x.drawImage(mapCv,(-mpx*(mwid/pw))*scale,(-mpy*(mht/ph))*scale,mwid*scale,mht*scale);
+    x.strokeStyle='rgba(120,160,190,.35)'; x.lineWidth=1; for(const rr of [250,500,1000]){ x.beginPath(); x.arc(0,0,rr*scale,0,Math.PI*2); x.stroke(); }
+    const wpx=(wx-FL.pos.x)*scale, wpy=(wz-FL.pos.z)*scale; x.fillStyle='#e040fb'; x.beginPath(); x.moveTo(wpx,wpy-8); x.lineTo(wpx+6,wpy); x.lineTo(wpx,wpy+8); x.lineTo(wpx-6,wpy); x.fill(); x.rotate(FL.psi); x.fillStyle='#e040fb'; x.font=`${sh*.04}px Helvetica,Arial`; x.textAlign='left'; x.fillText('BPST',wpx+10,wpy+4);
+    x.restore();
+    x.fillStyle='#ffd400'; x.beginPath(); x.moveTo(mcx,mcy-9); x.lineTo(mcx+7,mcy+8); x.lineTo(mcx,mcy+4); x.lineTo(mcx-7,mcy+8); x.closePath(); x.fill();
+    x.fillStyle='#e8eef5'; x.font=`${sh*.04}px Helvetica,Arial`; x.textAlign='left'; x.fillText('MAP · HDG UP · '+String(Math.round(hdg)).padStart(3,'0')+'°',mx+ew+8,sy+sh*.07); x.textAlign='right'; x.fillText('rozsah 1000 m',mx+sw-8,sy+sh*.07);
+    x.restore();
+    // ===== střed: audio panel, knoflíky, plyn =====
+    const cxs=W*.436, cws=W*.128; x.fillStyle='#14171a'; x.strokeStyle='#3b4047'; x.lineWidth=1.5; x.beginPath(); x.roundRect(cxs,sy-6,cws,sh+H*.05,8); x.fill(); x.stroke();
+    x.fillStyle='#071007'; x.fillRect(cxs+8,sy+4,cws-16,H*.045); x.fillStyle='#37c36a'; x.font=`${H*.016}px monospace`; x.textAlign='left'; x.fillText('COM1  123.450',cxs+12,sy+4+H*.017); x.fillText('XPDR  7000  ALT',cxs+12,sy+4+H*.036);
+    for(let i=0;i<2;i++) for(let j=0;j<3;j++){ x.fillStyle='#262b30'; x.beginPath(); x.arc(cxs+cws*(.2+.3*j),sy+H*.095+i*H*.055,H*.019,0,Math.PI*2); x.fill(); x.strokeStyle='#59616a'; x.stroke(); x.beginPath(); x.moveTo(cxs+cws*(.2+.3*j),sy+H*.095+i*H*.055); x.lineTo(cxs+cws*(.2+.3*j)+Math.cos(i*2+j+now/4000)*H*.014,sy+H*.095+i*H*.055+Math.sin(i*2+j+now/4000)*H*.014); x.stroke(); }
+    x.fillStyle='#0b0c0e'; x.fillRect(cxs+cws*.4,sy+H*.19,cws*.2,sh*.55); x.fillStyle='#d9362b'; const ty=sy+H*.19+sh*.55*(1-FL.thr); x.beginPath(); x.roundRect(cxs+cws*.34,ty-6,cws*.32,14,4); x.fill();
+    x.fillStyle='#9aa7b4'; x.font=`${H*.014}px Helvetica,Arial`; x.textAlign='center'; x.fillText('THROTTLE',cxs+cws/2,sy+H*.19+sh*.55+H*.02);
+    // ===== sidestick (levá strana) =====
+    const rollIn=(k.ArrowRight?1:0)-(k.ArrowLeft?1:0), pitIn=(k.ArrowDown?1:0)-(k.ArrowUp?1:0); const sx0=W*.075, sy0=H+4, gx=sx0+rollIn*22, gy=H*.865-pitIn*18;
+    x.strokeStyle='#202328'; x.lineWidth=16; x.lineCap='round'; x.beginPath(); x.moveTo(sx0,sy0); x.lineTo(gx,gy); x.stroke(); x.strokeStyle='#33383f'; x.lineWidth=9; x.beginPath(); x.moveTo(sx0,sy0); x.lineTo(gx,gy); x.stroke();
+    x.fillStyle='#17191c'; x.beginPath(); x.ellipse(gx,gy-10,22,14,rollIn*.3,0,Math.PI*2); x.fill(); x.strokeStyle='#4a5058'; x.lineWidth=1.5; x.stroke(); x.lineCap='butt';
+  }
+  if(performance.now()-FL.t0<14000){ x.textAlign='center'; x.font='13px Helvetica,Arial'; x.fillStyle='rgba(255,255,255,.92)'; x.fillText('Cirrus SR22 · ↑/↓ výškovka · ←/→ náklon · A/D směrovka · W/S plyn · H autostabilizace · C přístrojová deska ZAP/VYP · R restart · tažení myší = rozhled · Esc = konec',W/2,H*.115); }
+  if(COCK.panelMode===1&&performance.now()-FL.msgT<2200&&FL.msg){ x.textAlign='center'; x.font='bold 22px Helvetica,Arial'; x.fillStyle=/PULL|STALL|Kontakt/.test(FL.msg)?'#ff5a4d':'#ffd400'; x.fillText(FL.msg,W/2,H*.22); }
+  x.textAlign='left'; x.font='11px Helvetica,Arial'; x.fillStyle='rgba(255,255,255,.5)'; x.fillText('CIRRUS SR22 · POV kokpit · Garmin Perspective (zjednodušená simulace, bez kolizí s budovami)',14,H-8);
+}
+let last=performance.now();
+function tick(now){
+  const dt=Math.min(.05,(now-last)/1000); last=now;
+  if(mode==='fly'){ flyUpdate(dt); }
+  else if(mode==='pov'){
+    const sp=(keys.ShiftLeft||keys.ShiftRight?14:4.5)*(fly?3:1);
+    const f=(keys.KeyW||keys.ArrowUp?1:0)-(keys.KeyS||keys.ArrowDown?1:0), r=(keys.KeyD||keys.ArrowRight?1:0)-(keys.KeyA||keys.ArrowLeft?1:0);
+    if(f) pl.moveForward(f*sp*dt); if(r) pl.moveRight(r*sp*dt);
+    const X=Math.max(OX+8,Math.min(-OX-8,camera.position.x)), Z=Math.max(OZ+8,Math.min(-OZ-8,camera.position.z));
+    camera.position.x=X; camera.position.z=Z;
+    const gy=(ground(X,Z)-Z0)*EX+1.7;
+    if(fly){ camera.position.y+=((keys.Space?1:0)-(keys.KeyC?1:0))*sp*dt*1.5; camera.position.y=Math.max(gy,camera.position.y); }
+    else camera.position.y+= (gy-camera.position.y)*Math.min(1,dt*10);
+  } else orbit.update();
+  { const dOrb=mode==='orbit'?camera.position.distanceTo(orbit.target):null; labelGroup.children.forEach(o=>{ const u=o.userData; if(u.small||u.parcel){ const d=dOrb===null?camera.position.distanceTo(o.position):dOrb; o.visible=u.gv!==false&&d<=(u.parcel?280:450); } }); }   // označení parcel se skryjí při oddálení nad ~280 m
+  labelGroup.children.forEach(o=>{ if(o.isSprite){ const d=camera.position.distanceTo(o.position); const k=Math.max(.5,Math.min(3.2,d/130)); o.scale.set(o.scale.x/(o.userData.k||1)*k,o.scale.y/(o.userData.k||1)*k,1); o.userData.k=k; }});
+  const dir=new THREE.Vector3(); camera.getWorldDirection(dir); $('needle').setAttribute('transform',`rotate(${Math.atan2(dir.x,-dir.z)*-180/Math.PI+GRID} 23 23)`);
+  renderer.render(scene,camera); if(mode==='fly') drawCockpit(); requestAnimationFrame(tick);
+}
+function resize(){ const w=innerWidth,h=innerHeight; renderer.setSize(w,h,false); camera.aspect=w/h;
+  // střed obrazu = střed volné plochy vpravo od panelu (areál není zakrytý menu)
+  const side=document.getElementById('side'); const pw=(w>720&&side&&side.style.display!=='none'&&!side.classList.contains('collapsed'))?(side.offsetWidth+12):0;
+  if(pw) camera.setViewOffset(w,h,-pw/2,0,w,h); else camera.clearViewOffset();
+  camera.updateProjectionMatrix(); }
+addEventListener('resize',()=>{ resize(); if(mode==='fly') resizeCockpit(); });
+
+// ---------- údaje pod kurzorem (paprsek proti výškovému poli) ----------
+const ray=new THREE.Raycaster(), mv=new THREE.Vector2(); let lastMove=0;
+canvas.addEventListener('pointermove',e=>{
+  if(mode==='pov'&&pl.isLocked) return; const t=performance.now(); if(t-lastMove<80)return; lastMove=t;
+  mv.set(e.clientX/innerWidth*2-1,-(e.clientY/innerHeight)*2+1); ray.setFromCamera(mv,camera);
+  const o=ray.ray.origin, d=ray.ray.direction; let tt=1,hit=null;
+  for(;tt<4500;tt+=Math.max(1.5,tt*.004)){
+    const X=o.x+d.x*tt, Z=o.z+d.z*tt, Y=(o.y+d.y*tt)/EX; if(X<OX||X>-OX||Z<OZ||Z>-OZ){ if(hit===null&&tt>4000)break; continue; }
+    if(Y<ground(X,Z)-Z0){ hit=[X,Z]; break; }
+  }
+  if(hit){ const z=ground(hit[0],hit[1]); const s=slopeAt(hit[0],hit[1]); const [x,y]=toGis(hit[0],hit[1]);
+    $('hZ').textContent=z.toFixed(1)+' m n.m.'; $('hS').textContent=s.s.toFixed(1)+' % → '+compassName(s.az); $('hXY').textContent=`${Math.round(x)}, ${Math.round(y)}`; }
+});
+
+// start
+resize(); setDesign(true); $('loading').style.display='none';
+const HOME=PRESETS.find(p=>p.n.startsWith('Půdorys shora')); go(HOME); [350,1000,2200].forEach(t=>setTimeout(()=>{ if(!window.__moved) go(HOME); },t)); ['pointerdown','wheel','keydown'].forEach(ev=>addEventListener(ev,()=>{ window.__moved=true; },{once:true,capture:true})); window.__dbg={camera,orbit};   // výchozí pohled vždy půdorysně zhora na střed areálu
+requestAnimationFrame(tick);
+</script>
+</body>
+</html>
